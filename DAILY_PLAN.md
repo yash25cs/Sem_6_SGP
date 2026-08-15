@@ -23,6 +23,8 @@ feat(ai): add cited syllabus chat function
 
 **Commit:** `chore(repo): establish StudyTrail baseline`
 
+**Status:** Completed on 15 August 2026.
+
 - Add existing Flutter application, Supabase migrations, proposal/context, and
   project documentation.
 - Keep the previous `studytrail_ui.html` intact.
