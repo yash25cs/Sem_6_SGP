@@ -1,0 +1,33 @@
+# Local tooling and IDE state
+.claude/
+.idea/
+.qodo/
+.vscode/
+.github/modernize/
+
+# Reference exports retained locally; the Flutter implementation is the source
+# of truth and these image-heavy design exports do not need to be versioned.
+stitch_ref/
+
+# Flutter, Dart, Android, and platform build outputs
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/build/
+**/coverage/
+**/android/.gradle/
+*.apk
+*.aab
+
+# Local environment values and secrets
+**/dart_define.json
+**/.env
+*.keystore
+key.properties
+
+# Local crash and operating-system files
+hs_err_pid*.log
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,168 @@
+/// A row of `streaks` — one per user.
+class Streak {
+  const Streak({
+    this.currentStreak = 0,
+    this.bestStreak = 0,
+    this.lastActiveDate,
+  });
+
+  final int currentStreak;
+  final int bestStreak;
+  final DateTime? lastActiveDate;
+
+  factory Streak.fromMap(Map<String, dynamic> m) => Streak(
+        currentStreak: (m['current_streak'] as num?)?.toInt() ?? 0,
+        bestStreak: (m['best_streak'] as num?)?.toInt() ?? 0,
+        lastActiveDate: m['last_active_date'] == null
+            ? null
+            : DateTime.parse(m['last_active_date'] as String),
+      );
+}
+
+/// A row of `activity_log` — one per user per day. Powers the heatmap,
+/// weekly bars, and the week dots on Achievements.
+class ActivityDay {
+  const ActivityDay({
+    required this.date,
+    this.minutesStudied = 0,
+    this.tasksCompleted = 0,
+    this.xpEarned = 0,
+  });
+
+  final DateTime date;
+  final int minutesStudied;
+  final int tasksCompleted;
+  final int xpEarned;
+
+  bool get isActive => minutesStudied > 0 || tasksCompleted > 0;
+
+  /// 0–3 heatmap bucket, saturating at 90 minutes.
+  int get intensity {
+    if (minutesStudied <= 0) return 0;
+    if (minutesStudied < 30) return 1;
+    if (minutesStudied < 90) return 2;
+    return 3;
+  }
+
+  factory ActivityDay.fromMap(Map<String, dynamic> m) => ActivityDay(
+        date: DateTime.parse(m['activity_date'] as String),
+        minutesStudied: (m['minutes_studied'] as num?)?.toInt() ?? 0,
+        tasksCompleted: (m['tasks_completed'] as num?)?.toInt() ?? 0,
+        xpEarned: (m['xp_earned'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// A `badges` catalog row joined with the caller's `user_badges` state.
+/// Named `AchievementBadge` to avoid colliding with Flutter's `Badge` widget.
+class AchievementBadge {
+  const AchievementBadge({
+    required this.id,
+    required this.key,
+    required this.name,
+    this.iconKey,
+    this.colorKey,
+    this.description,
+    this.unlocked = false,
+    this.unlockedAt,
+  });
+
+  final String id;
+  final String key;
+  final String name;
+  final String? iconKey;
+  final String? colorKey;
+  final String? description;
+  final bool unlocked;
+  final DateTime? unlockedAt;
+
+  factory AchievementBadge.fromMap(Map<String, dynamic> m) {
+    // `user_badges` arrives as a list because it's a to-many embed; empty
+    // means the badge is still locked for this user.
+    final raw = m['user_badges'];
+    final mine = raw is List
+        ? (raw.isEmpty ? null : raw.first as Map<String, dynamic>)
+        : raw as Map<String, dynamic>?;
+
+    return AchievementBadge(
+      id: m['id'] as String,
+      key: (m['key'] as String?) ?? '',
+      name: (m['name'] as String?) ?? '',
+      iconKey: m['icon_key'] as String?,
+      colorKey: m['color_key'] as String?,
+      description: m['description'] as String?,
+      unlocked: (mine?['unlocked'] as bool?) ?? false,
+      unlockedAt: mine?['unlocked_at'] == null
+          ? null
+          : DateTime.parse(mine!['unlocked_at'] as String),
+    );
+  }
+}
+
+/// A row from the `get_class_leaderboard()` RPC.
+class LeaderboardEntry {
+  const LeaderboardEntry({
+    required this.userId,
+    required this.fullName,
+    this.avatarInitial,
+    this.level = 1,
+    this.xp = 0,
+    this.isMe = false,
+    this.rank = 0,
+  });
+
+  final String userId;
+  final String fullName;
+  final String? avatarInitial;
+  final int level;
+  final int xp;
+  final bool isMe;
+
+  /// 1-based position, assigned client-side from the RPC's ordering.
+  final int rank;
+
+  String get initial {
+    final a = avatarInitial?.trim();
+    if (a != null && a.isNotEmpty) return a[0].toUpperCase();
+    final n = fullName.trim();
+    return n.isEmpty ? '?' : n[0].toUpperCase();
+  }
+
+  factory LeaderboardEntry.fromMap(Map<String, dynamic> m, {int rank = 0}) =>
+      LeaderboardEntry(
+        userId: m['user_id'] as String,
+        fullName: (m['full_name'] as String?) ?? 'Student',
+        avatarInitial: m['avatar_initial'] as String?,
+        level: (m['level'] as num?)?.toInt() ?? 1,
+        xp: (m['xp'] as num?)?.toInt() ?? 0,
+        isMe: (m['is_me'] as bool?) ?? false,
+        rank: rank,
+      );
+}
+
+/// A row of `study_sessions` — a completed Pomodoro block.
+class StudySession {
+  const StudySession({
+    required this.id,
+    this.subjectId,
+    this.lengthMin,
+    this.sessionsCount,
+    this.focusedMin,
+    required this.sessionDate,
+  });
+
+  final String id;
+  final String? subjectId;
+  final int? lengthMin;
+  final int? sessionsCount;
+  final int? focusedMin;
+  final DateTime sessionDate;
+
+  factory StudySession.fromMap(Map<String, dynamic> m) => StudySession(
+        id: m['id'] as String,
+        subjectId: m['subject_id'] as String?,
+        lengthMin: (m['length_min'] as num?)?.toInt(),
+        sessionsCount: (m['sessions_count'] as num?)?.toInt(),
+        focusedMin: (m['focused_min'] as num?)?.toInt(),
+        sessionDate: DateTime.parse(m['session_date'] as String),
+      );
+}

@@ -1,0 +1,582 @@
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
+
+import '../models/models.dart';
+import '../state/stores.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import '../theme/theme_controller.dart';
+import '../widgets/common.dart';
+import '../widgets/data_states.dart';
+import '../widgets/nav.dart';
+
+/// Full settings screen — grouped preference rows with a back button.
+///
+/// Notifications and sound are local-only switches for now; everything under
+/// "Study" and "Account" writes straight to Postgres through [ProfileStore].
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key, this.onBack});
+  final VoidCallback? onBack;
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _notifications = true;
+  bool _sounds = false;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<ProfileStore>().load();
+    });
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Name / enrollment / branch / college, saved in one update.
+  Future<void> _editProfile() async {
+    final store = context.read<ProfileStore>();
+    final profile = store.profile;
+    if (profile == null) return;
+
+    final name = TextEditingController(text: profile.fullName);
+    final enrollment = TextEditingController(text: profile.enrollmentId ?? '');
+    final branch = TextEditingController(text: profile.branch ?? '');
+    final college = TextEditingController(text: profile.college ?? '');
+
+    final saved = await _showSheet<bool>(
+      title: 'Your details',
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SheetField(controller: name, label: 'Full name'),
+          _SheetField(controller: enrollment, label: 'Enrollment ID'),
+          _SheetField(controller: branch, label: 'Branch'),
+          _SheetField(controller: college, label: 'College'),
+          const SizedBox(height: 18),
+          PillButton('Save',
+              onTap: () => Navigator.of(sheetContext).pop(true)),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      final ok = await store.updateProfile(
+        fullName: name.text.trim(),
+        enrollmentId: enrollment.text.trim(),
+        branch: branch.text.trim(),
+        college: college.text.trim(),
+      );
+      _toast(ok ? 'Profile updated' : store.error ?? 'Could not save');
+    }
+
+    name.dispose();
+    enrollment.dispose();
+    branch.dispose();
+    college.dispose();
+  }
+
+  Future<void> _editGoalName() async {
+    final store = context.read<ProfileStore>();
+    final goal = store.activeGoal;
+    if (goal == null) {
+      _toast('Set a study goal first.');
+      return;
+    }
+
+    final controller = TextEditingController(text: goal.name);
+    final saved = await _showSheet<bool>(
+      title: 'Study goal',
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SheetField(controller: controller, label: 'Goal name'),
+          const SizedBox(height: 18),
+          PillButton('Save',
+              onTap: () => Navigator.of(sheetContext).pop(true)),
+        ],
+      ),
+    );
+
+    if (saved == true && controller.text.trim().isNotEmpty) {
+      final ok = await store.updateGoal(name: controller.text.trim());
+      _toast(ok ? 'Goal updated' : store.error ?? 'Could not save');
+    }
+    controller.dispose();
+  }
+
+  Future<void> _editExamDate() async {
+    final store = context.read<ProfileStore>();
+    final goal = store.activeGoal;
+    if (goal == null) {
+      _toast('Set a study goal first.');
+      return;
+    }
+
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: goal.examDate ?? now.add(const Duration(days: 30)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365 * 3)),
+      helpText: 'Exam date',
+    );
+    if (picked == null) return;
+
+    final ok = await store.updateGoal(examDate: picked);
+    _toast(ok ? 'Exam date updated' : store.error ?? 'Could not save');
+  }
+
+  Future<void> _editPace() async {
+    final store = context.read<ProfileStore>();
+    final goal = store.activeGoal;
+    if (goal == null) {
+      _toast('Set a study goal first.');
+      return;
+    }
+
+    final picked = await _showSheet<Pace>(
+      title: 'Study pace',
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final pace in Pace.values)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Symbols.speed, color: context.p.primary),
+              title: Text(pace.label,
+                  style: TextStyle(
+                      color: context.p.ink,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600)),
+              trailing: goal.pace == pace
+                  ? Icon(Symbols.check, color: context.p.primary)
+                  : null,
+              onTap: () => Navigator.of(sheetContext).pop(pace),
+            ),
+        ],
+      ),
+    );
+    if (picked == null) return;
+
+    final ok = await store.updateGoal(pace: picked);
+    _toast(ok ? 'Pace updated' : store.error ?? 'Could not save');
+  }
+
+  /// Joining a class is what puts the student on the leaderboard.
+  Future<void> _pickClass() async {
+    final store = context.read<ProfileStore>();
+    if (store.classes.isEmpty) await store.loadClasses();
+    if (!mounted) return;
+
+    if (store.classes.isEmpty) {
+      _toast('No classes are set up yet.');
+      return;
+    }
+
+    final currentId = store.profile?.classId;
+    final picked = await _showSheet<String>(
+      title: 'Your class',
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final c in store.classes)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Symbols.groups, color: context.p.primary),
+              title: Text((c['name'] as String?) ?? 'Class',
+                  style: TextStyle(
+                      color: context.p.ink,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600)),
+              trailing: currentId == c['id']
+                  ? Icon(Symbols.check, color: context.p.primary)
+                  : null,
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(c['id'] as String),
+            ),
+          if (currentId != null)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Symbols.logout, color: context.p.error),
+              title: Text('Leave class',
+                  style: TextStyle(
+                      color: context.p.error,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600)),
+              onTap: () => Navigator.of(sheetContext).pop('__leave__'),
+            ),
+        ],
+      ),
+    );
+    if (picked == null) return;
+
+    final ok = picked == '__leave__'
+        ? await store.leaveClass()
+        : await store.joinClass(picked);
+    _toast(ok ? 'Class updated' : store.error ?? 'Could not save');
+  }
+
+  Future<void> _logout() async {
+    final p = context.p;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: p.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Log out?',
+            style: TextStyle(
+                color: p.ink, fontSize: 18, fontWeight: FontWeight.w800)),
+        content: Text('Your progress stays saved to your account.',
+            style: TextStyle(color: p.ink2, fontSize: 14, height: 1.45)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('Cancel', style: TextStyle(color: p.ink3)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('Log out',
+                style:
+                    TextStyle(color: p.error, fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await context.read<AuthStore>().signOut();
+  }
+
+  /// Shared bottom-sheet chrome for the editors above.
+  Future<T?> _showSheet<T>({
+    required String title,
+    required WidgetBuilder builder,
+  }) {
+    final p = context.p;
+    return showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: p.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, MediaQuery.of(sheetContext).viewInsets.bottom + 24),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: TextStyle(
+                      color: p.ink, fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+              builder(sheetContext),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _dateLabel(DateTime? d) =>
+      d == null ? 'Not set' : '${_months[d.month - 1]} ${d.day}';
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    final theme = context.watch<ThemeController>();
+    final store = context.watch<ProfileStore>();
+    final profile = store.profile;
+    final goal = store.activeGoal;
+
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Column(
+        children: [
+          const StatusStrip(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 20, 6),
+            child: Row(
+              children: [
+                RoundIconButton(Symbols.arrow_back, onTap: widget.onBack),
+                const SizedBox(width: 8),
+                Text('Settings',
+                    style: TextStyle(
+                        color: p.ink,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              children: [
+                if (store.error != null)
+                  ErrorNotice(
+                    message: store.error!,
+                    onRetry: () => context.read<ProfileStore>().load(),
+                  ),
+
+                // profile summary
+                if (profile == null)
+                  const LoadingBlock(height: 92)
+                else
+                  AppCard(
+                    onTap: store.busy ? null : _editProfile,
+                    child: Row(
+                      children: [
+                        GradAvatar(profile.initial, size: 52),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  profile.fullName.isEmpty
+                                      ? 'Add your name'
+                                      : profile.fullName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: p.ink,
+                                      fontSize: 16.5,
+                                      fontWeight: FontWeight.w800)),
+                              Text(profile.email ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: p.ink3, fontSize: 12.5)),
+                            ],
+                          ),
+                        ),
+                        SoftChip('Edit',
+                            icon: Symbols.edit,
+                            tone: ChipTone.primary,
+                            small: true,
+                            onTap: store.busy ? null : _editProfile),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 22),
+
+                _GroupLabel('Preferences'),
+                _Group(children: [
+                  _Row(Symbols.dark_mode, 'Dark mode', p.primary,
+                      trailing: Switch(
+                        value: theme.isDark,
+                        onChanged: (v) =>
+                            context.read<ThemeController>().set(v),
+                      )),
+                  _Row(Symbols.notifications, 'Notifications', p.coral,
+                      trailing: Switch(
+                        value: _notifications,
+                        onChanged: (v) => setState(() => _notifications = v),
+                      )),
+                  _Row(Symbols.volume_up, 'Sound effects', p.green,
+                      trailing: Switch(
+                        value: _sounds,
+                        onChanged: (v) => setState(() => _sounds = v),
+                      )),
+                ]),
+                const SizedBox(height: 20),
+
+                _GroupLabel('Study'),
+                _Group(children: [
+                  _Row(Symbols.target, 'Study goal', p.primary,
+                      value: goal?.name ?? 'Not set',
+                      trailing: _chev(p),
+                      onTap: _editGoalName),
+                  _Row(Symbols.event, 'Exam date', p.coral,
+                      value: _dateLabel(goal?.examDate),
+                      trailing: _chev(p),
+                      onTap: _editExamDate),
+                  _Row(Symbols.speed, 'Pace', p.amber,
+                      value: goal?.pace.label ?? '—',
+                      trailing: _chev(p),
+                      onTap: _editPace),
+                ]),
+                const SizedBox(height: 20),
+
+                _GroupLabel('Account'),
+                _Group(children: [
+                  _Row(Symbols.groups, 'Class', p.primary,
+                      value: store.className ?? 'Not joined',
+                      trailing: _chev(p),
+                      onTap: _pickClass),
+                  _Row(Symbols.lock, 'Privacy & security', p.green,
+                      trailing: _chev(p),
+                      onTap: () => _toast(
+                          'Your data is private to your account and protected by row-level security.')),
+                  _Row(Symbols.help, 'Help & support', p.coral,
+                      trailing: _chev(p),
+                      onTap: () => _toast('Reach out at yash@charusat.edu.in')),
+                ]),
+                const SizedBox(height: 22),
+
+                PillButton('Log out',
+                    icon: Symbols.logout,
+                    variant: PillVariant.danger,
+                    onTap: context.watch<AuthStore>().busy ? null : _logout),
+                const SizedBox(height: 12),
+                Center(
+                  child: Text('StudyTrail v1.0 · SGP · CSPIT',
+                      style: TextStyle(color: p.ink3, fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chev(AppPalette p) =>
+      Icon(Symbols.chevron_right, color: p.ink3, size: 22);
+}
+
+/// Labelled text field used inside the editor sheets.
+class _SheetField extends StatelessWidget {
+  const _SheetField({required this.controller, required this.label});
+
+  final TextEditingController controller;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        textCapitalization: TextCapitalization.words,
+        style: TextStyle(color: p.ink, fontSize: 14.5),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: p.ink3, fontSize: 13.5),
+          filled: true,
+          fillColor: p.card2,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: p.line),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: p.line),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: p.primary, width: 1.6),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 10),
+        child: Text(text.toUpperCase(),
+            style: TextStyle(
+                color: context.p.ink3,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8)),
+      );
+}
+
+class _Group extends StatelessWidget {
+  const _Group({required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    return AppCard(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            children[i],
+            if (i < children.length - 1)
+              Divider(color: p.line, height: 1, indent: 60, endIndent: 16),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Row extends StatelessWidget {
+  const _Row(this.icon, this.label, this.color,
+      {this.value, required this.trailing, this.onTap});
+  final IconData icon;
+  final String label;
+  final Color color;
+  final String? value;
+  final Widget trailing;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          children: [
+            IconTile(icon,
+                bg: color.withValues(alpha: 0.14),
+                fg: color,
+                size: 34,
+                radius: 11),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(
+                      color: p.ink,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700)),
+            ),
+            if (value != null) ...[
+              Flexible(
+                child: Text(value!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                        color: p.ink3,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700)),
+              ),
+              const SizedBox(width: 6),
+            ],
+            trailing,
+          ],
+        ),
+      ),
+    );
+  }
+}

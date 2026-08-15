@@ -1,0 +1,507 @@
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
+
+import '../models/models.dart';
+import '../state/stores.dart';
+import '../theme/app_theme.dart';
+import '../widgets/common.dart';
+import '../widgets/data_states.dart';
+import '../widgets/nav.dart';
+
+/// Quiz flow — pick a quiz, answer one MCQ at a time with an explanation
+/// reveal, then a server-scored result.
+///
+/// Correctness is shown from `correct_index` for instant feedback, but the
+/// score and XP that count come back from `finish_quiz_attempt`, so a modified
+/// app can't award itself points.
+class QuizScreen extends StatefulWidget {
+  const QuizScreen({super.key, this.onClose});
+  final VoidCallback? onClose;
+
+  @override
+  State<QuizScreen> createState() => _QuizScreenState();
+}
+
+class _QuizScreenState extends State<QuizScreen> {
+  /// Set once the attempt has been submitted, so the results card replaces the
+  /// question view.
+  bool _showResults = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<QuizStore>().load();
+    });
+  }
+
+  Future<void> _startQuiz(Quiz quiz) async {
+    final store = context.read<QuizStore>();
+    final ok = await store.start(quiz.id);
+    if (!mounted) return;
+    if (ok && store.questions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This quiz has no questions yet.')),
+      );
+      store.reset();
+      return;
+    }
+    setState(() => _showResults = false);
+  }
+
+  Future<void> _advance() async {
+    final store = context.read<QuizStore>();
+    final wasLast = store.next();
+    if (!wasLast) return;
+
+    final ok = await store.finish();
+    if (!mounted) return;
+    if (ok) setState(() => _showResults = true);
+  }
+
+  void _backToList() {
+    context.read<QuizStore>().reset();
+    setState(() => _showResults = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    final store = context.watch<QuizStore>();
+    final question = store.current;
+
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Column(
+        children: [
+          const StatusStrip(),
+          // header — progress bar only makes sense inside a quiz
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 20, 10),
+            child: Row(
+              children: [
+                RoundIconButton(Symbols.close, onTap: widget.onClose),
+                const SizedBox(width: 14),
+                if (store.quiz != null && !_showResults) ...[
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: TweenAnimationBuilder<double>(
+                        duration: const Duration(milliseconds: 300),
+                        tween: Tween(begin: 0, end: store.progress),
+                        builder: (context, value, _) => LinearProgressIndicator(
+                          value: value,
+                          minHeight: 8,
+                          backgroundColor: p.card2,
+                          valueColor: AlwaysStoppedAnimation(p.primary),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Text('${store.questionNumber}/${store.questionCount}',
+                      style: TextStyle(
+                          color: p.ink2,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800)),
+                ] else
+                  Expanded(
+                    child: Text(_showResults ? 'Results' : 'Practice quiz',
+                        style: TextStyle(
+                            color: p.ink,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800)),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _showResults
+                ? _Results(
+                    attempt: store.attempt,
+                    onDone: _backToList,
+                  )
+                : store.quiz == null || question == null
+                    ? _QuizPicker(onStart: _startQuiz)
+                    : _QuestionView(
+                        question: question,
+                        picked: store.picked,
+                        score: store.runningScore,
+                      ),
+          ),
+          if (store.quiz != null && question != null && !_showResults)
+            FooterBar(
+              child: PillButton(
+                store.answered
+                    ? (store.isLastQuestion ? 'See results' : 'Next question')
+                    : 'Pick an answer',
+                trailingIcon: store.answered ? Symbols.arrow_forward : null,
+                variant:
+                    store.answered ? PillVariant.primary : PillVariant.soft,
+                onTap: store.answered && !store.busy ? _advance : null,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Quiz list, shown before an attempt starts.
+class _QuizPicker extends StatelessWidget {
+  const _QuizPicker({required this.onStart});
+
+  final ValueChanged<Quiz> onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    final store = context.watch<QuizStore>();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      children: [
+        if (store.error != null)
+          ErrorNotice(
+            message: store.error!,
+            onRetry: () => context.read<QuizStore>().load(),
+          ),
+        if (store.loading && !store.loaded) ...[
+          const LoadingBlock(height: 84),
+          const LoadingBlock(height: 84),
+        ] else if (store.available.isEmpty)
+          EmptyState(
+            icon: Symbols.quiz,
+            title: 'No quizzes yet',
+            message:
+                'Generate a quiz from a subject in your syllabus and it will show up here.',
+          )
+        else
+          for (final quiz in store.available)
+            InkWell(
+              onTap: store.busy ? null : () => onStart(quiz),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: p.card,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: p.shadowSm,
+                ),
+                child: Row(
+                  children: [
+                    IconTile(Symbols.quiz,
+                        bg: p.primarySoft, fg: p.primary, size: 46),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(quiz.title ?? 'Practice quiz',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: p.ink,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 2),
+                          Text(
+                              '${quiz.length ?? quiz.questions.length} questions · ${quiz.timerSec}s each',
+                              style:
+                                  TextStyle(color: p.ink3, fontSize: 12.5)),
+                        ],
+                      ),
+                    ),
+                    Icon(Symbols.play_arrow, color: p.primary, fill: 1),
+                  ],
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+/// A single question with its four options and the explanation reveal.
+class _QuestionView extends StatelessWidget {
+  const _QuestionView({
+    required this.question,
+    required this.picked,
+    required this.score,
+  });
+
+  final QuizQuestion question;
+  final int? picked;
+  final int score;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    final answered = picked != null;
+    final gotIt = answered && question.isCorrect(picked!);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      children: [
+        Row(children: [
+          SoftChip('+${question.xpReward} XP',
+              icon: Symbols.bolt, tone: ChipTone.amber, small: true),
+          const SizedBox(width: 8),
+          SoftChip('$score correct',
+              icon: Symbols.check_circle, tone: ChipTone.green, small: true),
+        ]),
+        const SizedBox(height: 20),
+        Text(question.question,
+            style: TextStyle(
+                color: p.ink,
+                fontSize: 22,
+                height: 1.35,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4)),
+        const SizedBox(height: 22),
+        for (final (i, option) in question.options.indexed) ...[
+          _Option(
+            label: option,
+            index: i,
+            picked: picked,
+            correct: question.correctIndex,
+            onTap: answered
+                ? null
+                : () => context.read<QuizStore>().pick(i),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (answered && (question.explanation ?? '').isNotEmpty) ...[
+          const SizedBox(height: 6),
+          AppCard(
+            color: gotIt ? p.greenSoft : p.primarySoft,
+            shadow: false,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(gotIt ? Symbols.check_circle : Symbols.lightbulb,
+                    color: gotIt ? p.green : p.primary, fill: 1, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(gotIt ? 'Correct!' : 'Not quite',
+                          style: TextStyle(
+                              color: gotIt ? p.green : p.primary,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text(question.explanation!,
+                          style: TextStyle(
+                              color: p.onPrimarySoft,
+                              fontSize: 13,
+                              height: 1.45,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Server-scored result of the attempt.
+class _Results extends StatelessWidget {
+  const _Results({required this.attempt, required this.onDone});
+
+  final QuizAttempt? attempt;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    final score = attempt?.score ?? 0;
+    final total = attempt?.total ?? 0;
+    final pct = ((attempt?.accuracy ?? 0) * 100).round();
+
+    // Tone the celebration to how it actually went.
+    final (tone, icon, headline) = switch (pct) {
+      >= 80 => (p.green, Symbols.celebration, 'Excellent!'),
+      >= 50 => (p.primary, Symbols.trending_up, 'Good effort'),
+      _ => (p.coral, Symbols.refresh, 'Keep practising'),
+    };
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      children: [
+        AppCard(
+          child: Column(
+            children: [
+              IconTile(icon,
+                  bg: tone.withValues(alpha: 0.14), fg: tone, size: 60),
+              const SizedBox(height: 16),
+              Text(headline,
+                  style: TextStyle(
+                      color: p.ink, fontSize: 21, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text('You scored $score out of $total',
+                  style: TextStyle(color: p.ink3, fontSize: 13.5)),
+              const SizedBox(height: 18),
+              ProgressTrack(total == 0 ? 0 : score / total,
+                  color: tone, height: 10),
+              const SizedBox(height: 8),
+              Text('$pct% accuracy',
+                  style: TextStyle(
+                      color: tone, fontSize: 13, fontWeight: FontWeight.w800)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _ResultStat(
+                  Symbols.check_circle, '$score', 'Correct', p.green),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ResultStat(Symbols.bolt, '+${attempt?.xpEarned ?? 0}',
+                  'XP earned', p.onAmber),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        PillButton('Back to quizzes', onTap: onDone),
+      ],
+    );
+  }
+}
+
+class _ResultStat extends StatelessWidget {
+  const _ResultStat(this.icon, this.value, this.label, this.color);
+  final IconData icon;
+  final String value, label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: p.shadowSm,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 24, fill: 1),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: p.ink,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800)),
+                Text(label, style: TextStyle(color: p.ink3, fontSize: 11.5)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Option extends StatelessWidget {
+  const _Option({
+    required this.label,
+    required this.index,
+    required this.picked,
+    required this.correct,
+    this.onTap,
+  });
+  final String label;
+  final int index;
+  final int? picked;
+  final int correct;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    final answered = picked != null;
+    final isCorrect = index == correct;
+    final isPicked = index == picked;
+
+    Color bg = p.card, border = p.line, fg = p.ink, badgeBg = p.card2, badgeFg = p.ink2;
+    IconData? mark;
+    if (answered) {
+      if (isCorrect) {
+        bg = p.greenSoft;
+        border = p.green;
+        fg = p.ink;
+        badgeBg = p.green;
+        badgeFg = Colors.white;
+        mark = Symbols.check;
+      } else if (isPicked) {
+        bg = p.errorSoft;
+        border = p.error;
+        badgeBg = p.error;
+        badgeFg = Colors.white;
+        mark = Symbols.close;
+      }
+    }
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+              color: border,
+              width: (answered && (isCorrect || isPicked)) ? 2 : 1.2),
+          boxShadow: (answered && (isCorrect || isPicked)) ? null : p.shadowSm,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                  color: badgeBg, borderRadius: BorderRadius.circular(9)),
+              child: mark != null
+                  ? Icon(mark, color: badgeFg, size: 18, weight: 700)
+                  : Text(String.fromCharCode(65 + index),
+                      style: TextStyle(
+                          color: badgeFg,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(
+                      color: fg,
+                      fontSize: 14.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

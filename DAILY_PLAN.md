@@ -1,0 +1,92 @@
+# StudyTrail daily GitHub delivery plan
+
+This plan keeps every push small, reviewable, and safe to run. Each completed
+day gets its own pull request (or direct commit while working solo), followed
+by an update to `FLOW.md` and `DECISIONS.md` where needed.
+
+## Commit conventions
+
+```text
+type(scope): short outcome
+```
+
+Use `feat`, `fix`, `security`, `test`, `docs`, `chore`, or `refactor` for
+`type`. Examples:
+
+```text
+security(rewards): restrict client-controlled XP and badges
+fix(tasks): make task completion retryable
+feat(ai): add cited syllabus chat function
+```
+
+## Baseline — repository setup
+
+**Commit:** `chore(repo): establish StudyTrail baseline`
+
+- Add existing Flutter application, Supabase migrations, proposal/context, and
+  project documentation.
+- Keep the previous `studytrail_ui.html` intact.
+- Exclude credentials, build output, local tooling, and reference exports.
+- Link the local repository to `https://github.com/yash25cs/Sem_6_SGP.git`.
+
+## Day 1 — Secure rewards and data ownership
+
+**Commit:** `security(rewards): prevent forged XP and badge unlocks`
+
+- Restrict direct client access to reward-granting RPCs.
+- Move XP and badge decisions to validated server-side workflows.
+- Add ownership checks between child rows and parent resources.
+- Add SQL/RLS verification tests or repeatable verification scripts.
+
+## Day 2 — Reliable core writes
+
+**Commit:** `fix(core): make goal and task updates recoverable`
+
+- Replace multi-call goal creation with one transactional RPC.
+- Make task completion and roadmap progress one server-side operation.
+- Add storage cleanup/retry handling for material upload failures.
+
+## Day 3 — Test the core student journey
+
+**Commit:** `test(core): cover onboarding and learning flows`
+
+- Add store/repository tests with mocked Supabase dependencies.
+- Cover signup bootstrap, goal creation, task retry, and flashcard-grade retry.
+- Add a short manual mobile test checklist to `SETUP.md`.
+
+## Day 4 — Material ingestion and RAG foundations
+
+**Commit:** `feat(materials): process uploads into searchable chunks`
+
+- Create the authenticated `embed-material` Edge Function.
+- Extract text, chunk it, generate embeddings, and update material status.
+- Keep the Gemini key in Supabase Function secrets only.
+
+## Day 5 — Real AI study chat
+
+**Commit:** `feat(chat): answer syllabus questions with citations`
+
+- Create the `chat` Edge Function.
+- Retrieve only the caller’s chunks through RLS-scoped search.
+- Save answer messages and citation rows; show clear retry/error states.
+
+## Day 6 — AI-generated practice
+
+**Commit:** `feat(practice): generate quizzes and flashcards`
+
+- Add `generate-flashcards` and `generate-quiz` Edge Functions.
+- Validate generated data before saving it.
+- Connect the existing Cards and Quiz screens to generated content.
+
+## Day 7 — Mobile release readiness
+
+**Commit:** `chore(release): prepare Android MVP build`
+
+- Run analysis, tests, and a physical-device regression pass.
+- Set an app icon, release name/version, privacy notes, and signed-build steps.
+- Create a tagged release and attach the Android APK only if needed.
+
+## Rule for future work
+
+Do not mix unrelated features in one push. A commit should build or clearly
+state what dependency remains unavailable (for example the Gemini key).

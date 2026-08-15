@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyBuddy — UI Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   STUDYBuddy — "Cognitive Calm / Soft-Minimalist"
+   Plus Jakarta Sans · Material Symbols · indigo+coral+amber
+   Matches the StudyBuddy Stitch design system.
+   ============================================================ */
+:root, :root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f8f9fd; --plane:#eef0f7;
+  --card:#ffffff; --card-2:#f2f3f7; --card-3:#e7e8ec;
+  --ink:#191c1f; --ink-2:#454652; --ink-3:#757684; --line:#e1e2e6; --line-2:#d5d6de;
+  --primary:#24389c; --primary-2:#3f51b5; --primary-soft:#dee0ff; --on-primary-soft:#00105c;
+  --coral:#fe6f42; --coral-soft:#ffdbd0; --on-coral:#7a2600; --coral-ink:#ac3509;
+  --amber:#fabd00; --amber-soft:#ffdf9e; --on-amber:#5b4300;
+  --green:#1f8f4e; --green-soft:#c9f0d6; --on-green:#0b3d21;
+  --error:#ba1a1a; --error-soft:#ffdad6; --on-error:#93000a;
+  --shadow:0 4px 24px rgba(25,28,31,.08); --shadow-sm:0 2px 10px rgba(25,28,31,.06);
+  --shadow-glow:0 8px 24px rgba(36,56,156,.28);
+  /* data viz (validated) */
+  --heat-0:#e7e8ec; --heat-1:#c7cdf3; --heat-2:#9aa5ec; --heat-3:#5a6cd0; --heat-4:#24389c;
+  --grid:#eceef4;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#12141c; --plane:#0b0d13;
+  --card:#1b1e2a; --card-2:#232634; --card-3:#2c3040;
+  --ink:#eef1f5; --ink-2:#b6b8c4; --ink-3:#83869a; --line:#2b2f3d; --line-2:#363b4d;
+  --primary:#bac3ff; --primary-2:#8b9bff; --primary-soft:#293ca0; --on-primary-soft:#dee0ff;
+  --coral:#ff7d54; --coral-soft:#4a2418; --on-coral:#ffb59f; --coral-ink:#ff9f80;
+  --amber:#fabd00; --amber-soft:#3d2f00; --on-amber:#ffdf9e;
+  --green:#5cd08a; --green-soft:#123528; --on-green:#a9f0c4;
+  --error:#ffb4ab; --error-soft:#3a1512; --on-error:#ffb4ab;
+  --shadow:0 6px 28px rgba(0,0,0,.5); --shadow-sm:0 2px 12px rgba(0,0,0,.4);
+  --shadow-glow:0 10px 30px rgba(109,124,255,.35);
+  --heat-0:#232634; --heat-1:#2b3468; --heat-2:#3a49a0; --heat-3:#5566cf; --heat-4:#8b9bff;
+  --grid:#232634;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{
+  font-family:"Plus Jakarta Sans",system-ui,sans-serif;
+  background:var(--plane); color:var(--ink);
+  line-height:1.5; -webkit-font-smoothing:antialiased;
+  transition:background .3s ease,color .3s ease;
+}
+.ms{
+  font-family:"Material Symbols Rounded"; font-weight:400; font-style:normal;
+  font-size:22px; line-height:1; letter-spacing:normal; display:inline-flex;
+  vertical-align:middle; -webkit-font-feature-settings:'liga'; font-feature-settings:'liga';
+  font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24; user-select:none;
+}
+.ms.fill{font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}
+.ms.s18{font-size:18px} .ms.s20{font-size:20px} .ms.s28{font-size:28px} .ms.s32{font-size:32px}
+
+/* ---------- gallery chrome ---------- */
+.top{
+  position:sticky; top:0; z-index:80; backdrop-filter:blur(16px);
+  background:color-mix(in srgb,var(--plane) 84%,transparent);
+  border-bottom:1px solid var(--line);
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:14px clamp(16px,4vw,44px);
+}
+.logo{display:flex; align-items:center; gap:11px}
+.logo .m{
+  width:34px;height:34px;border-radius:11px;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(135deg,var(--primary),var(--primary-2));box-shadow:var(--shadow-sm);
+}
+.logo b{font-size:19px;font-weight:800;letter-spacing:-.02em}
+.logo b span{color:var(--primary-2)}
+.logo small{display:block;font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-top:-2px}
+.tnav{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto}
+.tnav a{font-size:12.5px;font-weight:700;color:var(--ink-2);text-decoration:none;padding:7px 12px;border-radius:999px;transition:.15s}
+.tnav a:hover{background:var(--card);color:var(--primary);box-shadow:var(--shadow-sm)}
+.tbtn{display:inline-flex;align-items:center;gap:8px;cursor:pointer;background:var(--card);border:1px solid var(--line);color:var(--ink);padding:8px 14px;border-radius:999px;font-weight:700;font-size:12.5px;font-family:inherit;box-shadow:var(--shadow-sm)}
+
+.sec-h{padding:38px clamp(16px,4vw,44px) 0}
+.sec-h .k{font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--primary-2)}
+.sec-h h2{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:5px 0 6px}
+.sec-h p{color:var(--ink-2);font-size:14.5px;max-width:66ch}
+
+.grid{display:grid;gap:34px 28px;grid-template-columns:repeat(auto-fill,320px);justify-content:center;padding:24px clamp(16px,4vw,44px) 12px}
+
+/* ---------- phone ---------- */
+.phone{width:320px;scroll-margin-top:84px}
+.cap{display:flex;align-items:baseline;gap:8px;margin:0 6px 10px}
+.cap b{font-size:14.5px;font-weight:800;letter-spacing:-.01em}
+.cap span{font-size:12px;color:var(--ink-3);font-weight:600}
+.screen{
+  position:relative;width:320px;height:680px;background:var(--bg);
+  border-radius:40px;border:1px solid var(--line);box-shadow:var(--shadow),0 20px 50px rgba(25,28,31,.16);
+  overflow:hidden;display:flex;flex-direction:column;
+}
+:root[data-theme="dark"] .screen{box-shadow:var(--shadow),0 22px 60px rgba(0,0,0,.6)}
+.notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:104px;height:24px;background:#000;border-radius:16px;z-index:40;opacity:.9}
+.sbar{flex:0 0 40px;display:flex;align-items:center;justify-content:space-between;padding:14px 24px 0;font-size:12px;font-weight:700;z-index:20}
+.sbar .r{display:flex;gap:5px;align-items:center}
+.sbar .r .ms{font-size:15px}
+.view{flex:1;overflow-y:auto;overflow-x:hidden;position:relative}
+.view::-webkit-scrollbar{width:0}
+.wrap{padding:4px 20px 22px}
+
+/* ---------- app bar ---------- */
+.bar{display:flex;align-items:center;gap:12px;padding:6px 20px 10px}
+.bar .brand{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:800;letter-spacing:-.02em;color:var(--primary-2)}
+.pfp{width:40px;height:40px;border-radius:50%;object-fit:cover;flex:0 0 40px;border:2px solid var(--card);box-shadow:var(--shadow-sm)}
+.pfp.grad{background:linear-gradient(135deg,#6d7cff,#fe6f42);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px}
+.round{width:40px;height:40px;border-radius:50%;flex:0 0 40px;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);color:var(--ink-2);cursor:pointer}
+.round.plain{background:transparent;border:none;box-shadow:none}
+.grow{flex:1}
+.h-page{font-size:28px;font-weight:800;letter-spacing:-.025em;line-height:1.15}
+.h-sub{color:var(--ink-2);font-size:14.5px;margin-top:2px}
+
+/* ---------- cards ---------- */
+.card{background:var(--card);border-radius:24px;padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
+.card.p16{padding:16px}
+.card.flat{box-shadow:var(--shadow-sm)}
+.ch{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.ch .t{font-weight:800;font-size:17px;letter-spacing:-.01em}
+.ch .link{margin-left:auto;color:var(--primary-2);font-weight:700;font-size:13px;text-decoration:none;display:flex;align-items:center;gap:2px}
+
+/* ---------- pill buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:15px;padding:15px 22px;border-radius:999px;width:100%;background:var(--primary);color:#fff;box-shadow:var(--shadow-glow);transition:transform .12s}
+:root[data-theme="dark"] .btn{color:#12141c}
+.btn:hover{transform:scale(1.02)}
+.btn.sec{background:var(--card-2);color:var(--ink);box-shadow:none}
+.btn.coral{background:var(--coral);color:#fff;box-shadow:0 8px 22px rgba(254,111,66,.32)}
+.btn.outline{background:transparent;border:1.5px solid var(--line-2);color:var(--ink);box-shadow:none}
+.btn.danger{background:var(--card);color:var(--error);border:1.5px solid color-mix(in srgb,var(--error) 40%,transparent);box-shadow:none}
+.btn.sm{width:auto;padding:10px 18px;font-size:13.5px}
+
+/* ---------- inputs ---------- */
+.field{margin-bottom:16px}
+.field label{display:block;font-size:13px;font-weight:700;color:var(--ink-2);margin:0 0 7px 4px}
+.inp{display:flex;align-items:center;gap:10px;background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:0 16px;height:54px;color:var(--ink);transition:border-color .15s}
+.inp.focus{border-color:var(--primary-2)}
+.inp .ms{color:var(--ink-3)}
+.inp input{border:none;background:none;outline:none;font:inherit;color:inherit;width:100%;font-size:15px;font-weight:500}
+.inp input::placeholder{color:var(--ink-3);font-weight:500}
+
+/* ---------- chips ---------- */
+.chip{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:700;background:var(--card-2);color:var(--ink-2);cursor:pointer}
+.chip .ms{font-size:17px}
+.chip.on{background:var(--primary-soft);color:var(--on-primary-soft)}
+.chip.coral{background:var(--coral-soft);color:var(--coral-ink)}
+.chip.amber{background:var(--amber-soft);color:var(--on-amber)}
+.chip.green{background:var(--green-soft);color:var(--green)}
+.chip.error{background:var(--error-soft);color:var(--on-error)}
+.chip.xs{padding:4px 10px;font-size:11px}
+.chips{display:flex;gap:9px;flex-wrap:wrap}
+
+/* tag (subject/difficulty small labels) */
+.tag{display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:800;letter-spacing:.02em;text-transform:uppercase}
+
+/* ---------- rows ---------- */
+.row{display:flex;align-items:center;gap:14px;padding:13px 0}
+.row+.row{border-top:1px solid var(--line)}
+.ic{width:44px;height:44px;border-radius:14px;flex:0 0 44px;display:grid;place-items:center}
+.tx{flex:1;min-width:0}
+.tx b{font-size:15px;font-weight:700;display:block;letter-spacing:-.01em}
+.tx span{font-size:13px;color:var(--ink-3);font-weight:500}
+.rt{font-size:13px;color:var(--ink-3);font-weight:700;text-align:right}
+.tp{background:var(--primary-soft);color:var(--primary-2)}
+.tc{background:var(--coral-soft);color:var(--coral-ink)}
+.ta{background:var(--amber-soft);color:var(--on-amber)}
+.tg{background:var(--green-soft);color:var(--green)}
+.te{background:var(--error-soft);color:var(--on-error)}
+
+/* progress track */
+.track{height:10px;background:var(--card-3);border-radius:999px;overflow:hidden}
+.track>i{display:block;height:100%;border-radius:999px}
+
+/* segmented tabs */
+.seg{display:flex;gap:5px;background:var(--card-2);border-radius:16px;padding:5px;margin-bottom:18px}
+.seg .s{flex:1;text-align:center;font-size:13px;font-weight:700;color:var(--ink-2);padding:10px 4px;border-radius:12px;cursor:pointer}
+.seg .s.on{background:var(--card);color:var(--primary-2);box-shadow:var(--shadow-sm)}
+
+/* bottom nav */
+.nav{flex:0 0 70px;display:flex;align-items:center;justify-content:space-around;background:var(--card);border-top:1px solid var(--line);padding:0 6px 8px}
+.nav a{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-3);font-size:10.5px;font-weight:700;text-decoration:none;padding:8px 12px;border-radius:999px}
+.nav a .ms{font-size:24px}
+.nav a.on{color:#fff;background:var(--primary)}
+:root[data-theme="dark"] .nav a.on{color:#12141c}
+.nav a.on .ms{font-variation-settings:'FILL' 1,'wght' 600,'GRAD' 0,'opsz' 24}
+
+/* misc */
+.muted{color:var(--ink-3)} .small{font-size:13px} .center{text-align:center} .mb0{margin-bottom:0}
+.tnum{font-variant-numeric:tabular-nums}
+.hr{height:1px;background:var(--line);margin:14px 0}
+.dash{border:2px dashed var(--line-2);border-radius:20px;background:var(--card-2)}
+.foot{padding:44px;text-align:center;color:var(--ink-3);font-size:13px}
+.hc{aspect-ratio:1;border-radius:5px;display:block;background:var(--heat-0)}
+.hc[data-l="1"]{background:var(--heat-1)} .hc[data-l="2"]{background:var(--heat-2)}
+.hc[data-l="3"]{background:var(--heat-3)} .hc[data-l="4"]{background:var(--heat-4)}
+/* week-strip day cell */
+.dcell{width:100%;aspect-ratio:1;max-width:38px;margin:0 auto;border-radius:13px;display:grid;place-items:center;font-size:13px;font-weight:800}
+/* roadmap day selector */
+.daysel{flex:1;background:var(--card);border-radius:18px;padding:12px 4px 14px;text-align:center;box-shadow:var(--shadow-sm);position:relative;cursor:pointer}
+.daysel span{display:block;font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--ink-3)}
+.daysel b{display:block;font-size:20px;font-weight:800;margin-top:2px}
+.daysel.on{background:var(--primary);color:#fff}
+.daysel.on span{color:rgba(255,255,255,.8)}
+.daysel i{display:block;width:5px;height:5px;border-radius:50%;background:#fff;margin:4px auto 0}
+.daysel i.dot{background:var(--primary)}
+/* toggle switch */
+.tog{width:46px;height:26px;border-radius:999px;background:var(--card-3);position:relative;flex:0 0 46px;cursor:pointer;transition:background .2s}
+.tog::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:var(--shadow-sm);transition:transform .2s}
+.tog.on{background:var(--primary)}
+.tog.on::after{transform:translateX(20px)}
+/* badge tile */
+.badge{aspect-ratio:1;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;position:relative;overflow:hidden}
+.badge .ms{font-size:28px}
+.badge small{font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.badge.lock{background:var(--card-2);color:var(--ink-3)}
+/* settings row */
+.srow{display:flex;align-items:center;gap:13px;padding:13px 0}
+.srow+.srow{border-top:1px solid var(--line)}
+.srow .ic{width:38px;height:38px;border-radius:11px;flex:0 0 38px;background:var(--card-2);color:var(--ink-2)}
+.srow .tx b{font-size:14.5px;font-weight:700}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="logo">
+    <span class="m"><span class="ms fill">school</span></span>
+    <div><b>Study<span>Buddy</span></b><small>UI Design · SGP</small></div>
+  </div>
+  <nav class="tnav">
+    <a href="#onboarding">Onboarding</a>
+    <a href="#auth">Auth</a>
+    <a href="#core">Core</a>
+    <a href="#ai">AI &amp; Learn</a>
+    <a href="#engage">Engage</a>
+    <a href="#account">Account</a>
+  </nav>
+  <button class="tbtn" onclick="toggleTheme()"><span class="ms s18" id="ticon">dark_mode</span><span id="tlbl">Dark</span></button>
+</header>
+
+<div class="sec-h" id="onboarding"><div class="k">01 · Onboarding</div><h2>First-run &amp; setup</h2><p>The welcome carousel and material-intake flow — type an exam date, drop a PDF, or scan handwritten notes. Placeholders are phrased as gentle questions.</p></div>
+<div class="grid" id="g-onboarding">
+
+<!-- WELCOME -->
+<div class="phone">
+  <div class="cap"><b>Welcome</b><span>onboarding 1/3</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view"><div class="wrap" style="display:flex;flex-direction:column;min-height:100%;padding-top:14px">
+      <div style="display:flex;align-items:center">
+        <b style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:var(--primary-2)">Study<span style="color:var(--ink)">Buddy</span></b>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+          <i style="width:22px;height:6px;border-radius:99px;background:var(--primary)"></i>
+          <i style="width:8px;height:6px;border-radius:99px;background:var(--card-3)"></i>
+          <i style="width:8px;height:6px;border-radius:99px;background:var(--card-3)"></i>
+        </div>
+      </div>
+      <div style="margin:26px 0 4px;border-radius:28px;height:280px;background:linear-gradient(160deg,#fbe6d8,#e9ecfb 60%,#dfe3ff);position:relative;overflow:hidden;box-shadow:var(--shadow)">
+        <div style="position:absolute;left:20px;bottom:26px;width:150px;height:104px;border-radius:14px;background:#fff;box-shadow:0 8px 20px rgba(25,28,31,.18);padding:10px;transform:rotate(-4deg)">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;height:100%">
+            <span style="background:#cfe0ff;border-radius:5px"></span><span style="background:#ffd9c9;border-radius:5px"></span><span style="background:#d6f5df;border-radius:5px"></span>
+            <span style="background:#e6dbff;border-radius:5px"></span><span style="background:#d6f5df;border-radius:5px"></span><span style="background:#ffe7b0;border-radius:5px"></span>
+          </div>
+        </div>
+        <div style="position:absolute;right:30px;top:44px;width:96px;height:96px;border-radius:50%;background:radial-gradient(circle at 34% 30%,#eef1ff,#aeb8ff 70%,#7c8bff);box-shadow:0 12px 30px rgba(124,139,255,.5),inset 0 -6px 14px rgba(90,108,208,.4)">
+          <span style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);width:56px;height:12px;border:3px solid #cfd6ff;border-radius:50%"></span>
+          <span style="position:absolute;top:40px;left:26px;width:9px;height:14px;background:#24389c;border-radius:99px"></span>
+          <span style="position:absolute;top:40px;right:26px;width:9px;height:14px;background:#24389c;border-radius:99px"></span>
+          <span style="position:absolute;top:58px;left:50%;transform:translateX(-50%);width:22px;height:11px;border-bottom:3px solid #24389c;border-radius:0 0 40px 40px"></span>
+        </div>
+      </div>
+      <div style="flex:1;min-height:14px"></div>
+      <h1 style="font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1.15;text-align:center">Turn your exams<br>into a plan.</h1>
+      <p style="text-align:center;color:var(--ink-2);font-size:15px;margin:12px 6px 0">Upload your syllabus, notes, or videos and let StudyBuddy build your roadmap.</p>
+      <div style="flex:1;min-height:20px"></div>
+      <button class="btn">Next<span class="ms s20">arrow_forward</span></button>
+      <p class="center small muted" style="margin-top:14px">Skip</p>
+    </div></div>
+  </div>
+</div>
+
+<!-- WHAT ARE WE STUDYING -->
+<div class="phone">
+  <div class="cap"><b>Add material</b><span>onboarding 2/3</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view"><div class="wrap" style="padding-top:10px">
+      <span class="round plain" style="margin:2px 0 14px"><span class="ms s28">arrow_back</span></span>
+      <h1 style="font-size:27px;font-weight:800;letter-spacing:-.025em;color:var(--primary-2)">What are we studying?</h1>
+      <p class="h-sub" style="margin-bottom:22px">Provide your materials, and we'll build your personalized roadmap.</p>
+      <div class="card">
+        <div class="ic tp" style="border-radius:50%;margin-bottom:14px"><span class="ms">calendar_month</span></div>
+        <b style="font-size:18px;font-weight:800;letter-spacing:-.01em">Type Exam Date</b>
+        <p class="muted" style="font-size:14px;margin-top:6px">Just have a deadline? Tell us when, and we'll space out the study blocks.</p>
+      </div>
+      <div class="card">
+        <div class="ic tc" style="border-radius:50%;margin-bottom:14px"><span class="ms">picture_as_pdf</span></div>
+        <b style="font-size:18px;font-weight:800;letter-spacing:-.01em">Upload PDF Syllabus</b>
+        <p class="muted" style="font-size:14px;margin-top:6px">Drop your course syllabus. We'll extract the key topics and chapters automatically.</p>
+      </div>
+      <div class="card">
+        <div class="ic ta" style="border-radius:50%;margin-bottom:14px"><span class="ms">document_scanner</span></div>
+        <b style="font-size:18px;font-weight:800;letter-spacing:-.01em">Scan Photo / Notes</b>
+        <p class="muted" style="font-size:14px;margin-top:6px">Snap a picture of the whiteboard or your handwritten lecture notes.</p>
+      </div>
+      <div class="dash" style="padding:28px 16px;text-align:center;margin-top:4px">
+        <span class="ms s32" style="color:var(--ink-3)">cloud_upload</span>
+        <b style="display:block;font-size:16px;font-weight:800;margin-top:8px">Drag &amp; drop files here</b>
+        <p class="muted" style="font-size:13px;margin-top:4px">Support for PDF, JPG, PNG up to 50 MB. We'll handle the heavy lifting.</p>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<!-- SET TARGET -->
+<div class="phone">
+  <div class="cap"><b>Exam date</b><span>onboarding 3/3</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view"><div class="wrap" style="padding-top:10px">
+      <span class="round plain" style="margin:2px 0 14px"><span class="ms s28">arrow_back</span></span>
+      <h1 style="font-size:27px;font-weight:800;letter-spacing:-.025em">Set your target.</h1>
+      <p class="h-sub" style="margin-bottom:22px">We'll count down and pace the plan for you.</p>
+      <div class="field"><label>What's the exam?</label>
+        <div class="inp"><span class="ms">menu_book</span><input value="Physics — Unit Test 2"></div>
+      </div>
+      <div class="field"><label>When is it?</label>
+        <div class="inp focus"><span class="ms">event</span><input value="24 August 2026"><span class="chip on xs">in 20 days</span></div>
+      </div>
+      <div class="field"><label>Exam type — tunes the roadmap</label>
+        <div class="chips">
+          <span class="chip"><span class="ms">backpack</span>School</span>
+          <span class="chip on"><span class="ms">school</span>College</span>
+          <span class="chip"><span class="ms">emoji_events</span>Competitive</span>
+        </div>
+      </div>
+      <div class="card p16" style="display:flex;align-items:center;gap:12px;margin-top:6px">
+        <div class="ic tp"><span class="ms">auto_awesome</span></div>
+        <div class="tx"><b>6 topics detected</b><span>from physics_syllabus.pdf</span></div>
+        <span class="chip green xs"><span class="ms s18">check</span>parsed</span>
+      </div>
+      <button class="btn" style="margin-top:10px">Generate my roadmap<span class="ms s20">auto_awesome</span></button>
+    </div></div>
+  </div>
+</div>
+
+</div>
+
+<div class="sec-h" id="auth"><div class="k">02 · Authentication</div><h2>Sign in &amp; sign up</h2><p>Low-pressure entry. One primary pill action, Google sign-in, and a clear switch between modes.</p></div>
+<div class="grid" id="g-auth">
+
+<!-- LOGIN -->
+<div class="phone">
+  <div class="cap"><b>Sign in</b><span>returning</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view"><div class="wrap" style="padding-top:22px">
+      <div style="text-align:center;margin:16px 0 28px">
+        <div style="width:66px;height:66px;border-radius:22px;margin:0 auto 18px;background:linear-gradient(135deg,var(--primary),var(--primary-2));display:grid;place-items:center;color:#fff;box-shadow:var(--shadow-glow)">
+          <span class="ms fill s32">school</span>
+        </div>
+        <h1 style="font-size:26px;font-weight:800;letter-spacing:-.025em">Welcome back</h1>
+        <p class="h-sub">Let's pick up where you left off.</p>
+      </div>
+      <div class="field"><label>Email</label>
+        <div class="inp"><span class="ms">mail</span><input value="yash@charusat.edu.in"></div>
+      </div>
+      <div class="field"><label>Password</label>
+        <div class="inp"><span class="ms">lock</span><input type="password" value="password123"><span class="ms" style="cursor:pointer">visibility</span></div>
+      </div>
+      <div style="text-align:right;margin:-6px 4px 18px"><a href="#g-auth" style="color:var(--primary-2);font-size:13px;font-weight:700;text-decoration:none">Forgot password?</a></div>
+      <button class="btn">Sign in<span class="ms s20">arrow_forward</span></button>
+      <div style="display:flex;align-items:center;gap:12px;margin:20px 2px;color:var(--ink-3);font-size:12px;font-weight:700">
+        <span style="flex:1;height:1px;background:var(--line)"></span>OR<span style="flex:1;height:1px;background:var(--line)"></span>
+      </div>
+      <button class="btn outline"><span class="ms s20" style="color:#ea4335">g_translate</span>Continue with Google</button>
+      <p class="center small" style="margin-top:22px;color:var(--ink-2)">New here? <a href="#g-auth" style="color:var(--primary-2);font-weight:800;text-decoration:none">Create an account</a></p>
+    </div></div>
+  </div>
+</div>
+
+<!-- SIGN UP -->
+<div class="phone">
+  <div class="cap"><b>Sign up</b><span>new account</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view"><div class="wrap" style="padding-top:18px">
+      <span class="round plain" style="margin:2px 0 14px"><span class="ms s28">arrow_back</span></span>
+      <h1 style="font-size:27px;font-weight:800;letter-spacing:-.025em">Create account</h1>
+      <p class="h-sub" style="margin-bottom:22px">Your AI study partner, in under a minute.</p>
+      <div class="field"><label>Full name</label>
+        <div class="inp"><span class="ms">person</span><input value="Yash Patel"></div>
+      </div>
+      <div class="field"><label>Email</label>
+        <div class="inp"><span class="ms">mail</span><input placeholder="What's your email?"></div>
+      </div>
+      <div class="field" style="margin-bottom:8px"><label>Password</label>
+        <div class="inp focus"><span class="ms">lock</span><input type="password" value="strongpass"><span class="ms" style="cursor:pointer">visibility_off</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:0 4px 18px">
+        <div class="track" style="flex:1;height:6px"><i style="width:75%;background:var(--green)"></i></div>
+        <span class="small" style="color:var(--green);font-weight:800">Strong</span>
+      </div>
+      <div class="field"><label>I'm joining as a…</label>
+        <div class="chips">
+          <span class="chip on"><span class="ms">school</span>Student</span>
+          <span class="chip"><span class="ms">family_restroom</span>Parent</span>
+          <span class="chip"><span class="ms">co_present</span>Educator</span>
+        </div>
+      </div>
+      <button class="btn">Create account</button>
+      <p class="center small muted" style="margin-top:16px;line-height:1.7">By continuing you agree to our<br><a href="#g-auth" style="color:var(--primary-2);font-weight:700;text-decoration:none">Terms</a> &amp; <a href="#g-auth" style="color:var(--primary-2);font-weight:700;text-decoration:none">Privacy Policy</a></p>
+    </div></div>
+  </div>
+</div>
+
+</div>
+
+<div class="sec-h" id="core"><div class="k">03 · Core</div><h2>Home · Roadmap · Progress</h2><p>The daily driver — Today's Focus, the day-by-day AI roadmap with drag handles, and the analytics dashboard.</p></div>
+<div class="grid" id="g-core">
+
+<!-- HOME / DASHBOARD -->
+<div class="phone">
+  <div class="cap"><b>Home</b><span>Today's Focus</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px">
+        <div class="pfp grad">Y</div>
+        <div class="grow">
+          <div class="h-page" style="font-size:22px">Good morning, Yash!</div>
+          <div style="display:flex;align-items:center;gap:5px;color:var(--coral-ink);font-weight:800;font-size:13px;margin-top:2px"><span class="ms s18 fill" style="color:var(--coral)">local_fire_department</span>12-day streak</div>
+        </div>
+        <span class="round plain"><span class="ms s28">notifications</span></span>
+      </div>
+      <div class="wrap" style="padding-top:6px">
+
+        <!-- focus card (white, session tiles + timer pill) -->
+        <div class="card" style="padding:22px;position:relative;overflow:hidden">
+          <div style="display:flex;align-items:flex-start">
+            <div style="flex:1">
+              <span class="chip xs" style="background:var(--card-2)">Today's Focus</span>
+              <h1 style="font-size:32px;font-weight:800;letter-spacing:-.03em;margin:12px 0 2px">Thermodynamics</h1>
+              <p class="muted" style="font-size:15px">Heat Engines &amp; Efficiency</p>
+            </div>
+            <span class="chip on" style="padding:11px 16px;font-size:15px;font-weight:800"><span class="ms s20">timer</span>45m</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;margin-top:26px">
+            <div style="display:flex;align-items:center">
+              <span class="ic" style="width:38px;height:38px;border-radius:50%;background:var(--card-2);border:2px solid var(--card)"><span class="ms s20" style="color:var(--primary-2)">description</span></span>
+              <span class="ic" style="width:38px;height:38px;border-radius:50%;background:var(--card-2);border:2px solid var(--card);margin-left:-12px"><span class="ms s20" style="color:var(--coral)">smart_display</span></span>
+              <span class="ic" style="width:38px;height:38px;border-radius:50%;background:var(--card-3);border:2px solid var(--card);margin-left:-12px;font-size:12px;font-weight:800;color:var(--ink-2)">+2</span>
+            </div>
+            <button class="btn" style="width:auto;flex:1;padding:14px 20px"><span class="ms s20 fill">play_arrow</span>Start Session</button>
+          </div>
+        </div>
+
+        <!-- coral countdown -->
+        <div class="card" style="background:var(--coral);color:#fff;text-align:center;padding:26px 20px;box-shadow:0 12px 30px rgba(254,111,66,.32)">
+          <span class="ms s28">event_upcoming</span>
+          <div style="font-size:34px;font-weight:800;letter-spacing:-.02em;margin-top:8px">20 Days</div>
+          <div style="font-size:14px;font-weight:600;opacity:.92">until Physics Unit Test</div>
+        </div>
+
+        <!-- study momentum -->
+        <div class="card">
+          <div class="ch"><span class="t">Study Momentum</span></div>
+          <div style="display:flex;gap:8px;justify-content:space-between">
+            <div style="text-align:center;flex:1"><div class="dcell" style="background:var(--card-2);color:var(--ink-3)">S</div></div>
+            <div style="text-align:center;flex:1"><div class="dcell" style="background:var(--heat-1);color:var(--primary)">M</div></div>
+            <div style="text-align:center;flex:1"><div class="dcell" style="background:var(--heat-3);color:#fff">T</div></div>
+            <div style="text-align:center;flex:1"><div class="dcell" style="background:var(--heat-4);color:#fff">W</div></div>
+            <div style="text-align:center;flex:1"><div class="dcell" style="background:var(--heat-1);color:var(--primary)">T</div></div>
+            <div style="text-align:center;flex:1"><div class="dcell" style="background:var(--heat-3);color:#fff">F</div></div>
+            <div style="text-align:center;flex:1;position:relative"><div class="dcell" style="background:var(--card-2);color:var(--ink-3)">S</div><i style="position:absolute;top:-2px;right:8px;width:8px;height:8px;background:var(--coral);border-radius:50%"></i></div>
+          </div>
+        </div>
+
+        <!-- subject progress -->
+        <div class="card">
+          <div class="ch"><span class="t">Subject Progress</span><a class="link" href="#g-core">View All</a></div>
+          <div class="row" style="padding-top:2px">
+            <div class="ic ta" style="border-radius:50%"><span class="ms">calculate</span></div>
+            <div class="tx"><b>Physics</b>
+              <div class="track" style="margin-top:7px"><i style="width:65%;background:var(--amber)"></i></div>
+            </div>
+            <span class="rt tnum" style="color:var(--ink);font-size:15px">65%</span>
+          </div>
+          <div class="row">
+            <div class="ic tp" style="border-radius:50%"><span class="ms">functions</span></div>
+            <div class="tx"><b>Adv. Calculus</b>
+              <div class="track" style="margin-top:7px"><i style="width:42%;background:var(--primary)"></i></div>
+            </div>
+            <span class="rt tnum" style="color:var(--ink);font-size:15px">42%</span>
+          </div>
+        </div>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+    <div class="nav">
+      <a class="on"><span class="ms">home</span>Home</a>
+      <a><span class="ms">calendar_month</span>Roadmap</a>
+      <a><span class="ms">smart_toy</span>Chat</a>
+      <a><span class="ms">style</span>Cards</a>
+      <a><span class="ms">person</span>Profile</a>
+    </div>
+  </div>
+</div>
+
+<!-- ROADMAP -->
+<div class="phone">
+  <div class="cap"><b>Roadmap</b><span>AI schedule</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px">
+        <b class="brand">StudyBuddy</b>
+        <span class="grow"></span>
+        <span class="ms fill" style="color:var(--coral)">local_fire_department</span>
+        <div class="pfp grad" style="width:34px;height:34px;flex:0 0 34px">Y</div>
+      </div>
+      <div class="wrap" style="padding-top:2px">
+        <h1 class="h-page">August Roadmap</h1>
+        <p class="h-sub" style="margin-bottom:18px">Stay on track with your study goals.</p>
+        <!-- day selector -->
+        <div style="display:flex;gap:9px;overflow:hidden;margin-bottom:22px">
+          <div class="daysel"><span>MON</span><b>10</b></div>
+          <div class="daysel"><span>TUE</span><b>11</b></div>
+          <div class="daysel on"><span>WED</span><b>12</b><i></i></div>
+          <div class="daysel"><span>THU</span><b>13</b><i class="dot"></i></div>
+          <div class="daysel"><span>FRI</span><b>14</b></div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;margin:0 4px 12px"><span style="flex:1;height:1px;background:var(--line)"></span><span class="small" style="font-weight:800;color:var(--ink-2)">Today, August 12</span><span style="flex:1;height:1px;background:var(--line)"></span></div>
+
+        <!-- task cards -->
+        <div class="card p16" style="position:relative;overflow:hidden">
+          <div style="display:flex;gap:12px">
+            <span class="ms" style="color:var(--ink-3);cursor:grab">drag_indicator</span>
+            <div style="flex:1">
+              <div style="display:flex;gap:8px;margin-bottom:8px"><span class="tag tg">Biology</span><span class="tag te">Hard</span></div>
+              <b style="font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.2">Cellular Respiration Synthesis</b>
+              <p class="muted" style="font-size:13.5px;margin-top:5px">Review chapters 4–5 and complete flashcards.</p>
+            </div>
+            <span class="ms s28" style="color:var(--line-2)">radio_button_unchecked</span>
+          </div>
+          <div style="position:absolute;left:0;bottom:0;height:4px;width:45%;background:var(--coral)"></div>
+        </div>
+
+        <div class="card p16">
+          <div style="display:flex;gap:12px">
+            <span class="ms" style="color:var(--ink-3);cursor:grab">drag_indicator</span>
+            <div style="flex:1">
+              <div style="display:flex;gap:8px;margin-bottom:8px"><span class="tag tc">Chemistry</span><span class="tag ta">Med</span></div>
+              <b style="font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.2">Organic Compounds Practice</b>
+              <p class="muted" style="font-size:13.5px;margin-top:5px">Complete worksheet 12.</p>
+            </div>
+            <span class="ms s28" style="color:var(--line-2)">radio_button_unchecked</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;margin:12px 4px"><span style="flex:1;height:1px;background:var(--line)"></span><span class="small" style="font-weight:800;color:var(--ink-2)">Tomorrow, August 13</span><span style="flex:1;height:1px;background:var(--line)"></span></div>
+
+        <div class="card p16">
+          <div style="display:flex;gap:12px">
+            <span class="ms" style="color:var(--ink-3);cursor:grab">drag_indicator</span>
+            <div style="flex:1">
+              <div style="display:flex;gap:8px;margin-bottom:8px"><span class="tag tp">History</span><span class="tag tg">Easy</span></div>
+              <b style="font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.2">Industrial Revolution Essay</b>
+              <p class="muted" style="font-size:13.5px;margin-top:5px">Draft thesis and main points.</p>
+            </div>
+            <span class="ms s28" style="color:var(--line-2)">radio_button_unchecked</span>
+          </div>
+        </div>
+
+        <div class="dash" style="padding:16px;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--ink-2);font-weight:700;font-size:14px"><span class="ms s20">add</span>Add new task</div>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+    <div class="nav">
+      <a><span class="ms">home</span>Home</a>
+      <a class="on"><span class="ms">calendar_month</span>Roadmap</a>
+      <a><span class="ms">smart_toy</span>Chat</a>
+      <a><span class="ms">style</span>Cards</a>
+      <a><span class="ms">person</span>Profile</a>
+    </div>
+  </div>
+</div>
+
+<!-- PROGRESS ANALYTICS -->
+<div class="phone">
+  <div class="cap"><b>Progress</b><span>analytics</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px">
+        <div class="pfp grad" style="width:34px;height:34px;flex:0 0 34px">Y</div>
+        <b class="brand" style="margin-left:2px">StudyBuddy</b>
+        <span class="grow"></span>
+        <span class="ms fill" style="color:var(--coral)">local_fire_department</span>
+      </div>
+      <div class="wrap" style="padding-top:2px">
+        <h1 style="font-size:32px;font-weight:800;letter-spacing:-.03em;line-height:1.1">Total Progress: 72%</h1>
+        <p style="display:flex;align-items:center;gap:6px;color:var(--ink-2);font-size:14px;margin-top:8px"><span class="ms s18" style="color:var(--amber)">auto_awesome</span>Keep going, you're ahead of schedule!</p>
+        <span class="chip on" style="margin:14px 0 4px"><span class="ms s18">trending_up</span>+5% this week</span>
+
+        <!-- mastery ring -->
+        <div class="card" style="margin-top:14px">
+          <div class="ch"><span class="t">Mastery</span></div>
+          <div style="display:grid;place-items:center;padding:6px 0 4px">
+            <svg width="180" height="180" viewBox="0 0 180 180">
+              <circle cx="90" cy="90" r="72" fill="none" stroke="var(--primary-soft)" stroke-width="18"/>
+              <circle cx="90" cy="90" r="72" fill="none" stroke="var(--primary)" stroke-width="18" stroke-linecap="round" stroke-dasharray="452.4" stroke-dashoffset="126.7" transform="rotate(-90 90 90)"/>
+              <text x="90" y="86" text-anchor="middle" font-size="40" font-weight="800" fill="var(--ink)" font-family="Plus Jakarta Sans">72%</text>
+              <text x="90" y="108" text-anchor="middle" font-size="12" font-weight="700" letter-spacing="1.5" fill="var(--ink-3)" font-family="Plus Jakarta Sans">COMPLETE</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- stat tiles -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+          <div class="card mb0" style="padding:18px"><div class="ic tp" style="border-radius:14px;margin-bottom:14px"><span class="ms">timer</span></div><div style="font-size:32px;font-weight:800;letter-spacing:-.02em">12h</div><div class="muted small" style="font-weight:600">Study Time</div></div>
+          <div class="card mb0" style="padding:18px"><div class="ic tc" style="border-radius:14px;margin-bottom:14px"><span class="ms">school</span></div><div style="font-size:32px;font-weight:800;letter-spacing:-.02em">45</div><div class="muted small" style="font-weight:600">Topics Mastered</div></div>
+        </div>
+        <div class="card" style="padding:18px;position:relative;overflow:hidden">
+          <div style="position:absolute;right:-20px;top:-20px;width:120px;height:120px;background:radial-gradient(circle,var(--amber-soft),transparent 70%)"></div>
+          <div class="ic ta" style="border-radius:14px;margin-bottom:14px"><span class="ms">smart_toy</span></div>
+          <div style="font-size:32px;font-weight:800;letter-spacing:-.02em">8h <span style="font-size:15px;color:var(--on-amber);font-weight:700">saved</span></div>
+          <div class="muted small" style="font-weight:600">By AI Assistance</div>
+        </div>
+
+        <!-- focus areas -->
+        <div class="card">
+          <div class="ch"><span class="t">Focus Areas</span></div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:16px;background:var(--card-2)">
+              <div class="ic tp" style="border-radius:12px"><span class="ms">trending_up</span></div>
+              <div class="tx"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3)">Strongest</span><b>Optics</b></div>
+              <span class="rt tnum" style="color:var(--primary-2);font-size:15px">95%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:16px;background:var(--error-soft)">
+              <div class="ic te" style="border-radius:12px"><span class="ms">warning</span></div>
+              <div class="tx"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--on-error)">Needs Review</span><b style="color:var(--on-error)">Modern Physics</b></div>
+              <span class="rt tnum" style="color:var(--on-error);font-size:15px">31%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding:12px;border-radius:16px;background:var(--coral-soft)">
+              <div class="ic tc" style="border-radius:12px"><span class="ms">history</span></div>
+              <div class="tx"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--coral-ink)">Improving</span><b style="color:var(--coral-ink)">Electrostatics</b></div>
+              <span class="rt tnum" style="color:var(--coral-ink);font-size:15px">+12%</span>
+            </div>
+          </div>
+        </div>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+    <div class="nav">
+      <a><span class="ms">home</span>Home</a>
+      <a><span class="ms">calendar_month</span>Roadmap</a>
+      <a><span class="ms">smart_toy</span>Chat</a>
+      <a><span class="ms">style</span>Cards</a>
+      <a class="on"><span class="ms">insights</span>Progress</a>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="sec-h" id="ai"><div class="k">04 · AI &amp; Learning</div><h2>Chat · Quiz · Flashcards</h2><p>The RAG-grounded study buddy that cites its source, adaptive quizzes, and tap-to-flip spaced-repetition cards.</p></div>
+<div class="grid" id="g-ai">
+
+<!-- AI CHAT Q&A -->
+<div class="phone">
+  <div class="cap"><b>AI Study Buddy</b><span>RAG chat</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view" style="display:flex;flex-direction:column">
+      <div class="bar" style="padding-top:12px;padding-bottom:6px">
+        <b class="brand">StudyBuddy</b>
+        <span class="grow"></span>
+        <span class="round plain"><span class="ms fill" style="color:var(--coral)">local_fire_department</span></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px;padding:10px 20px;border-bottom:1px solid var(--line)">
+        <span class="ms s20" style="color:var(--primary-2)">menu_book</span>
+        <b style="font-size:16px;font-weight:800;letter-spacing:-.01em">AI Study Buddy <span class="muted" style="font-weight:600">· Biology Notes</span></b>
+      </div>
+      <div class="view" style="padding:0">
+        <div class="wrap" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:18px">
+          <div class="center"><span class="chip xs" style="background:var(--card-2);color:var(--ink-3)">Today, 10:42 AM</span></div>
+
+          <!-- user -->
+          <div style="display:flex;justify-content:flex-end">
+            <div style="max-width:82%;background:var(--card-3);color:var(--ink);border-radius:20px 20px 6px 20px;padding:12px 15px;font-size:14.5px;font-weight:500">How does mitochondria work?</div>
+          </div>
+
+          <!-- AI -->
+          <div style="display:flex;gap:9px;align-items:flex-start">
+            <span class="ic" style="width:32px;height:32px;flex:0 0 32px;border-radius:50%;background:var(--primary-soft);color:var(--primary-2);margin-top:2px"><span class="ms s18">smart_toy</span></span>
+            <div style="max-width:84%;display:flex;flex-direction:column;gap:9px">
+              <div style="background:linear-gradient(150deg,var(--primary),var(--primary-2));color:#fff;border-radius:20px 20px 20px 6px;padding:15px;box-shadow:var(--shadow)">
+                <p style="font-size:14px;line-height:1.55">The mitochondria are often called the <b>"powerhouses"</b> of the cell. They take in nutrients, break them down, and create energy-rich molecules.</p>
+                <p style="font-size:14px;line-height:1.55;margin-top:10px">Most reactions of cellular respiration happen within them.</p>
+                <span style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;background:rgba(255,255,255,.16);border-radius:11px;padding:8px 12px;font-size:12.5px;font-weight:700"><span class="ms s18">article</span>Source: Page 4, Paragraph 2</span>
+              </div>
+              <div class="chips">
+                <span class="chip" style="background:var(--card-2)"><span class="ms s18">play_circle</span>04:20 in Video</span>
+                <span class="chip" style="background:var(--card-2)"><span class="ms s18">psychology</span>Quiz me on this</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- input bar -->
+      <div style="padding:12px 18px 16px;background:linear-gradient(0deg,var(--bg) 60%,transparent)">
+        <div class="inp focus" style="border-radius:24px;height:56px;padding:0 8px 0 8px;box-shadow:var(--shadow)">
+          <span class="round plain"><span class="ms" style="color:var(--ink-3)">attach_file</span></span>
+          <input placeholder="What are we focusing on today?" style="font-weight:500">
+          <button class="round" style="background:var(--primary);border:none;color:#fff;flex:0 0 40px"><span class="ms s20 fill">arrow_upward</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="nav">
+      <a><span class="ms">home</span>Home</a>
+      <a><span class="ms">calendar_month</span>Roadmap</a>
+      <a class="on"><span class="ms">smart_toy</span>Chat</a>
+      <a><span class="ms">style</span>Cards</a>
+      <a><span class="ms">person</span>Profile</a>
+    </div>
+  </div>
+</div>
+
+<!-- QUIZ TIME -->
+<div class="phone">
+  <div class="cap"><b>Quiz Time</b><span>adaptive MCQ</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px;padding-bottom:8px">
+        <span class="round plain"><span class="ms s28" style="color:var(--primary-2)">arrow_back</span></span>
+        <div class="grow" style="margin-left:2px">
+          <b style="font-size:17px;font-weight:800;letter-spacing:-.01em;display:block">Quick Quiz: Cell Biology</b>
+          <span class="muted small" style="font-weight:600">Question 3 of 10</span>
+        </div>
+        <span class="chip xs" style="background:var(--card-2)"><span class="ms s18 fill" style="color:var(--coral)">local_fire_department</span>12</span>
+      </div>
+      <div class="track" style="height:5px;border-radius:0;background:var(--card-3);margin:0 0 4px"><i style="width:30%;background:var(--primary);border-radius:0 999px 999px 0"></i></div>
+      <div class="wrap" style="padding-top:14px">
+        <div class="card">
+          <span class="chip xs on" style="margin-bottom:14px">Topic: Organelles</span>
+          <h1 style="font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.25">Which organelle is considered the "powerhouse" of the cell?</h1>
+          <div style="display:flex;flex-direction:column;gap:11px;margin-top:20px">
+            <!-- selected -->
+            <div style="display:flex;align-items:center;gap:13px;padding:14px;border-radius:16px;border:1.5px solid var(--primary);background:var(--primary-soft);box-shadow:0 0 14px rgba(36,56,156,.14)">
+              <span class="ic" style="width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:var(--primary);color:#fff;font-weight:800;font-size:13px">A</span>
+              <b style="flex:1;font-size:15.5px;font-weight:800;color:var(--on-primary-soft)">Mitochondria</b>
+              <span class="ms fill" style="color:var(--primary)">check_circle</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:13px;padding:14px;border-radius:16px;border:1.5px solid var(--line);background:var(--card)">
+              <span class="ic" style="width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:var(--card-3);color:var(--ink-2);font-weight:800;font-size:13px">B</span>
+              <b style="flex:1;font-size:15.5px;font-weight:600">Nucleus</b>
+            </div>
+            <div style="display:flex;align-items:center;gap:13px;padding:14px;border-radius:16px;border:1.5px solid var(--line);background:var(--card)">
+              <span class="ic" style="width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:var(--card-3);color:var(--ink-2);font-weight:800;font-size:13px">C</span>
+              <b style="flex:1;font-size:15.5px;font-weight:600">Ribosome</b>
+            </div>
+            <div style="display:flex;align-items:center;gap:13px;padding:14px;border-radius:16px;border:1.5px solid var(--line);background:var(--card)">
+              <span class="ic" style="width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:var(--card-3);color:var(--ink-2);font-weight:800;font-size:13px">D</span>
+              <b style="flex:1;font-size:15.5px;font-weight:600">Endoplasmic Reticulum</b>
+            </div>
+          </div>
+        </div>
+
+        <div class="card p16" style="display:flex;align-items:flex-start;gap:12px">
+          <div class="ic tp" style="border-radius:50%"><span class="ms">trending_up</span></div>
+          <div class="tx"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3)">Strong Topic</span><b style="font-size:16px">Organelles</b><p class="muted" style="font-size:12.5px;margin-top:3px">100% correct in this category today.</p></div>
+        </div>
+        <div class="card p16" style="display:flex;align-items:flex-start;gap:12px">
+          <div class="ic tc" style="border-radius:50%"><span class="ms">trending_down</span></div>
+          <div class="tx"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3)">Weak Topic</span><b style="font-size:16px">Mitosis</b><p class="muted" style="font-size:12.5px;margin-top:3px">Review the phases of cell division.</p></div>
+        </div>
+        <button class="btn" style="margin-top:6px">Continue<span class="ms s20">arrow_forward</span></button>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FLASHCARDS -->
+<div class="phone">
+  <div class="cap"><b>Flashcards</b><span>spaced review</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px;padding-bottom:6px">
+        <div class="pfp grad" style="width:34px;height:34px;flex:0 0 34px">Y</div>
+        <b class="brand" style="margin-left:2px">StudyBuddy</b>
+        <span class="grow"></span>
+        <span class="round plain"><span class="ms fill" style="color:var(--coral)">local_fire_department</span></span>
+      </div>
+      <div class="wrap" style="padding-top:2px;display:flex;flex-direction:column;min-height:calc(100% - 8px)">
+        <h1 class="h-page" style="margin-bottom:12px">Daily Review</h1>
+        <div class="chips" style="margin-bottom:20px">
+          <span class="chip"><span class="ms s18" style="color:var(--primary-2)">schedule</span>Due Today (12)</span>
+          <span class="chip on"><span class="ms s18">emoji_events</span>Mastered (45)</span>
+        </div>
+        <!-- flip card -->
+        <div style="flex:1;background:var(--card);border-radius:32px;box-shadow:var(--shadow);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;position:relative;min-height:300px">
+          <span class="chip xs" style="position:absolute;top:16px;left:16px;background:var(--card-2);color:var(--ink-3)">3 of 12</span>
+          <span style="font-size:52px;font-weight:800;letter-spacing:-.03em">ATP</span>
+          <div style="position:absolute;bottom:20px;display:flex;align-items:center;gap:6px;color:var(--ink-3);font-size:13px;font-weight:700;opacity:.7"><span class="ms s18">touch_app</span>Tap to flip</div>
+        </div>
+        <div style="display:flex;gap:14px;margin-top:20px">
+          <button class="btn" style="background:var(--coral-soft);color:var(--coral-ink);box-shadow:none"><span class="ms s20">close</span>Study More</button>
+          <button class="btn"><span class="ms s20">check</span>Know</button>
+        </div>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+    <div class="nav">
+      <a><span class="ms">home</span>Home</a>
+      <a><span class="ms">calendar_month</span>Roadmap</a>
+      <a><span class="ms">smart_toy</span>Chat</a>
+      <a class="on"><span class="ms">style</span>Cards</a>
+      <a><span class="ms">person</span>Profile</a>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="sec-h" id="engage"><div class="k">05 · Engagement</div><h2>Streaks · Pomodoro · Buddies</h2><p>Gentle gamification — badges and leaderboard, a focus timer, and shared study rooms.</p></div>
+<div class="grid" id="g-engage">
+
+<!-- STREAKS & BADGES -->
+<div class="phone">
+  <div class="cap"><b>Achievements</b><span>streaks &amp; badges</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px;padding-bottom:6px">
+        <b class="brand">StudyBuddy</b>
+        <span class="grow"></span>
+        <span class="round plain"><span class="ms fill" style="color:var(--coral)">local_fire_department</span></span>
+      </div>
+      <div class="wrap" style="padding-top:2px">
+        <h1 class="h-page">Achievements</h1>
+        <p class="h-sub" style="margin-bottom:18px">Your momentum, badges, and rank.</p>
+
+        <!-- streak hero -->
+        <div class="card" style="background:var(--coral);color:#fff;text-align:center;padding:24px 20px;box-shadow:0 12px 30px rgba(254,111,66,.32);position:relative;overflow:hidden">
+          <div style="position:absolute;right:-30px;top:-30px;width:130px;height:130px;background:rgba(255,255,255,.12);border-radius:50%"></div>
+          <span class="ms s32 fill">local_fire_department</span>
+          <div style="font-size:44px;font-weight:800;letter-spacing:-.03em;margin-top:4px">12</div>
+          <div style="font-size:14px;font-weight:700;opacity:.95">day streak · personal best!</div>
+          <div style="display:flex;justify-content:space-between;gap:6px;margin-top:18px">
+            <span style="flex:1;text-align:center"><i style="display:block;width:9px;height:9px;border-radius:50%;background:#fff;margin:0 auto 4px"></i><small style="font-size:10px;opacity:.85">M</small></span>
+            <span style="flex:1;text-align:center"><i style="display:block;width:9px;height:9px;border-radius:50%;background:#fff;margin:0 auto 4px"></i><small style="font-size:10px;opacity:.85">T</small></span>
+            <span style="flex:1;text-align:center"><i style="display:block;width:9px;height:9px;border-radius:50%;background:#fff;margin:0 auto 4px"></i><small style="font-size:10px;opacity:.85">W</small></span>
+            <span style="flex:1;text-align:center"><i style="display:block;width:9px;height:9px;border-radius:50%;background:#fff;margin:0 auto 4px"></i><small style="font-size:10px;opacity:.85">T</small></span>
+            <span style="flex:1;text-align:center"><i style="display:block;width:9px;height:9px;border-radius:50%;background:#fff;margin:0 auto 4px"></i><small style="font-size:10px;opacity:.85">F</small></span>
+            <span style="flex:1;text-align:center"><i style="display:block;width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.35);margin:0 auto 4px"></i><small style="font-size:10px;opacity:.85">S</small></span>
+            <span style="flex:1;text-align:center"><i style="display:block;width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.35);margin:0 auto 4px"></i><small style="font-size:10px;opacity:.85">S</small></span>
+          </div>
+        </div>
+
+        <!-- badges -->
+        <div class="card">
+          <div class="ch"><span class="t">Badges</span><a class="link" href="#g-engage">8 of 24</a></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+            <div class="badge" style="background:var(--primary-soft);color:var(--primary-2)"><span class="ms fill">bolt</span><small>Focus</small></div>
+            <div class="badge" style="background:var(--coral-soft);color:var(--coral-ink)"><span class="ms fill">emoji_events</span><small>Top 10%</small></div>
+            <div class="badge" style="background:var(--amber-soft);color:var(--on-amber)"><span class="ms fill">school</span><small>Scholar</small></div>
+            <div class="badge" style="background:var(--green-soft);color:var(--green)"><span class="ms fill">task_alt</span><small>Streak 7</small></div>
+            <div class="badge lock"><span class="ms">lock</span><small>Night Owl</small></div>
+            <div class="badge lock"><span class="ms">lock</span><small>Marathon</small></div>
+          </div>
+        </div>
+
+        <!-- leaderboard -->
+        <div class="card">
+          <div class="ch"><span class="t">Class Leaderboard</span></div>
+          <div class="row" style="padding-top:2px">
+            <span style="width:26px;font-weight:800;color:var(--amber);font-size:16px">1</span>
+            <div class="pfp grad" style="width:38px;height:38px;flex:0 0 38px;background:linear-gradient(135deg,#8b9bff,#24389c)">A</div>
+            <div class="tx"><b>Aarav Shah</b><span>2,410 XP</span></div>
+            <span class="ms fill" style="color:var(--amber)">workspace_premium</span>
+          </div>
+          <div class="row">
+            <span style="width:26px;font-weight:800;color:var(--ink-3);font-size:16px">2</span>
+            <div class="pfp grad" style="width:38px;height:38px;flex:0 0 38px;background:linear-gradient(135deg,#fe6f42,#ac3509)">P</div>
+            <div class="tx"><b>Priya Menon</b><span>2,180 XP</span></div>
+          </div>
+          <div class="row" style="background:var(--primary-soft);margin:6px -8px 0;padding:12px 8px;border-radius:14px;border-top:none">
+            <span style="width:26px;font-weight:800;color:var(--primary-2);font-size:16px">3</span>
+            <div class="pfp grad" style="width:38px;height:38px;flex:0 0 38px">Y</div>
+            <div class="tx"><b style="color:var(--on-primary-soft)">You</b><span style="color:var(--primary-2)">2,050 XP</span></div>
+            <span class="chip xs on" style="background:var(--primary);color:#fff">+120</span>
+          </div>
+        </div>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+    <div class="nav">
+      <a><span class="ms">home</span>Home</a>
+      <a><span class="ms">calendar_month</span>Roadmap</a>
+      <a><span class="ms">smart_toy</span>Chat</a>
+      <a><span class="ms">style</span>Cards</a>
+      <a><span class="ms">person</span>Profile</a>
+    </div>
+  </div>
+</div>
+
+<!-- POMODORO FOCUS -->
+<div class="phone">
+  <div class="cap"><b>Focus Timer</b><span>Pomodoro session</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar" style="color:#fff"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view" style="background:linear-gradient(170deg,#24389c,#151f5e 65%,#0e1443)">
+      <div class="bar" style="padding-top:12px;padding-bottom:6px">
+        <span class="round plain"><span class="ms s28" style="color:#fff">close</span></span>
+        <span class="grow"></span>
+        <span class="chip xs" style="background:rgba(255,255,255,.14);color:#fff">Thermodynamics</span>
+        <span class="round plain"><span class="ms" style="color:#fff">more_horiz</span></span>
+      </div>
+      <div class="wrap" style="display:flex;flex-direction:column;align-items:center;min-height:calc(100% - 8px);padding-top:8px">
+        <p style="color:rgba(255,255,255,.7);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin-top:8px">Focus Session · 2 of 4</p>
+
+        <!-- ring -->
+        <div style="position:relative;margin:24px 0">
+          <svg width="240" height="240" viewBox="0 0 240 240">
+            <circle cx="120" cy="120" r="104" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="14"/>
+            <circle cx="120" cy="120" r="104" fill="none" stroke="#fe6f42" stroke-width="14" stroke-linecap="round" stroke-dasharray="653.5" stroke-dashoffset="215.6" transform="rotate(-90 120 120)"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff">
+            <div class="tnum" style="font-size:52px;font-weight:800;letter-spacing:-.02em;line-height:1">17:20</div>
+            <div style="color:rgba(255,255,255,.7);font-size:13px;font-weight:700;margin-top:4px">remaining</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <span style="width:9px;height:9px;border-radius:50%;background:#fe6f42"></span>
+          <span style="width:9px;height:9px;border-radius:50%;background:#fe6f42"></span>
+          <span style="width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.25)"></span>
+          <span style="width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.25)"></span>
+        </div>
+        <p style="color:rgba(255,255,255,.65);font-size:13px;margin-bottom:auto">2 sessions until a long break</p>
+
+        <div style="display:flex;align-items:center;gap:20px;width:100%;justify-content:center;margin:24px 0 8px">
+          <span class="round" style="width:52px;height:52px;flex:0 0 52px;background:rgba(255,255,255,.12);border:none;color:#fff"><span class="ms s28">refresh</span></span>
+          <button class="btn coral" style="width:auto;padding:0;width:78px;height:78px;border-radius:50%;box-shadow:0 12px 30px rgba(254,111,66,.5)"><span class="ms s32 fill">pause</span></button>
+          <span class="round" style="width:52px;height:52px;flex:0 0 52px;background:rgba(255,255,255,.12);border:none;color:#fff"><span class="ms s28">skip_next</span></span>
+        </div>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STUDY BUDDY ROOM -->
+<div class="phone">
+  <div class="cap"><b>Study Room</b><span>buddies · live</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px;padding-bottom:8px">
+        <span class="round plain"><span class="ms s28" style="color:var(--primary-2)">arrow_back</span></span>
+        <div class="grow" style="margin-left:2px">
+          <b style="font-size:17px;font-weight:800;letter-spacing:-.01em;display:block">Finals Grind Room</b>
+          <span style="display:flex;align-items:center;gap:5px;color:var(--green);font-size:12px;font-weight:700"><i style="width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block"></i>4 studying now</span>
+        </div>
+        <span class="round"><span class="ms" style="color:var(--ink-2)">share</span></span>
+      </div>
+      <div class="wrap" style="padding-top:4px">
+        <!-- collective timer -->
+        <div class="card" style="text-align:center;background:linear-gradient(150deg,var(--primary),var(--primary-2));color:#fff;padding:22px;box-shadow:var(--shadow-glow)">
+          <span class="chip xs" style="background:rgba(255,255,255,.16);color:#fff">Shared Focus</span>
+          <div class="tnum" style="font-size:40px;font-weight:800;letter-spacing:-.02em;margin-top:10px">24:59</div>
+          <p style="font-size:13px;opacity:.9;margin-top:2px">Everyone's heads-down · silent mode</p>
+        </div>
+
+        <!-- members -->
+        <div class="card">
+          <div class="ch"><span class="t">In the room</span><a class="link" href="#g-engage">Invite</a></div>
+          <div class="row" style="padding-top:2px">
+            <div class="pfp grad" style="width:40px;height:40px;flex:0 0 40px">Y</div>
+            <div class="tx"><b>You</b><span>Thermodynamics · 17 min</span></div>
+            <span class="chip green xs"><span class="ms s18">bolt</span>focused</span>
+          </div>
+          <div class="row">
+            <div class="pfp grad" style="width:40px;height:40px;flex:0 0 40px;background:linear-gradient(135deg,#8b9bff,#24389c)">A</div>
+            <div class="tx"><b>Aarav</b><span>Organic Chem · 42 min</span></div>
+            <span class="chip green xs"><span class="ms s18">bolt</span>focused</span>
+          </div>
+          <div class="row">
+            <div class="pfp grad" style="width:40px;height:40px;flex:0 0 40px;background:linear-gradient(135deg,#fe6f42,#ac3509)">P</div>
+            <div class="tx"><b>Priya</b><span>on a short break</span></div>
+            <span class="chip coral xs"><span class="ms s18">coffee</span>break</span>
+          </div>
+          <div class="row">
+            <div class="pfp grad" style="width:40px;height:40px;flex:0 0 40px;background:linear-gradient(135deg,#5cd08a,#1f8f4e)">R</div>
+            <div class="tx"><b>Rhea</b><span>Calculus · 8 min</span></div>
+            <span class="chip green xs"><span class="ms s18">bolt</span>focused</span>
+          </div>
+        </div>
+
+        <!-- cheer bar -->
+        <div class="card p16" style="display:flex;align-items:center;gap:10px">
+          <div class="inp" style="flex:1;height:46px;border-radius:14px"><span class="ms s20">sentiment_satisfied</span><input placeholder="Send a cheer…"></div>
+          <button class="round" style="background:var(--primary);border:none;color:#fff;flex:0 0 46px;width:46px;height:46px"><span class="ms s20 fill">send</span></button>
+        </div>
+        <button class="btn danger" style="margin-top:2px"><span class="ms s20">logout</span>Leave room</button>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="sec-h" id="account"><div class="k">06 · Account</div><h2>Profile &amp; settings</h2><p>Identity, earned badges, app preferences, and account management.</p></div>
+<div class="grid" id="g-account">
+
+<!-- PROFILE -->
+<div class="phone">
+  <div class="cap"><b>Profile</b><span>identity &amp; badges</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px;padding-bottom:6px">
+        <b class="brand">StudyBuddy</b>
+        <span class="grow"></span>
+        <span class="round plain"><span class="ms fill" style="color:var(--coral)">local_fire_department</span></span>
+      </div>
+      <div class="wrap" style="padding-top:2px">
+        <!-- profile hero -->
+        <div class="card center" style="padding:26px 20px">
+          <div style="position:relative;width:96px;margin:0 auto 14px">
+            <div class="pfp grad" style="width:96px;height:96px;flex:0 0 96px;border:4px solid var(--card);font-size:34px;box-shadow:var(--shadow)">Y</div>
+            <span class="round" style="position:absolute;bottom:-2px;right:-2px;width:34px;height:34px;background:var(--primary);border:3px solid var(--card);color:#fff"><span class="ms s18 fill">photo_camera</span></span>
+          </div>
+          <h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em">Yash Patel</h1>
+          <div style="display:inline-flex;align-items:center;gap:5px;color:var(--primary-2);font-weight:800;font-size:13.5px;margin-top:4px"><span class="ms s18 fill">verified</span>Study Sage</div>
+          <p class="muted" style="font-size:13.5px;margin-top:8px">B.E. Computer Science · CSPIT, Charusat<br>Enrollment D25CS118</p>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <div class="card mb0" style="flex:1;padding:12px;background:var(--card-2);box-shadow:none"><div style="font-size:20px;font-weight:800;color:var(--coral-ink)">12</div><div class="muted" style="font-size:11px;font-weight:700">Day Streak</div></div>
+            <div class="card mb0" style="flex:1;padding:12px;background:var(--card-2);box-shadow:none"><div style="font-size:20px;font-weight:800;color:var(--primary-2)">45</div><div class="muted" style="font-size:11px;font-weight:700">Mastered</div></div>
+            <div class="card mb0" style="flex:1;padding:12px;background:var(--card-2);box-shadow:none"><div style="font-size:20px;font-weight:800;color:var(--on-amber)">8</div><div class="muted" style="font-size:11px;font-weight:700">Badges</div></div>
+          </div>
+        </div>
+
+        <!-- recent badges -->
+        <div class="card">
+          <div class="ch"><span class="t">Recent Badges</span><a class="link" href="#g-engage">View all</a></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+            <div class="badge" style="background:var(--primary-soft);color:var(--primary-2)"><span class="ms fill">bolt</span><small>Focus</small></div>
+            <div class="badge" style="background:var(--coral-soft);color:var(--coral-ink)"><span class="ms fill">emoji_events</span><small>Top 10%</small></div>
+            <div class="badge" style="background:var(--amber-soft);color:var(--on-amber)"><span class="ms fill">school</span><small>Scholar</small></div>
+          </div>
+        </div>
+
+        <!-- quick actions -->
+        <div class="card" style="padding:8px 20px">
+          <div class="srow"><div class="ic"><span class="ms s20">edit</span></div><div class="tx grow"><b>Edit profile</b></div><span class="ms" style="color:var(--ink-3)">chevron_right</span></div>
+          <div class="srow"><div class="ic"><span class="ms s20">bookmark</span></div><div class="tx grow"><b>Saved resources</b></div><span class="ms" style="color:var(--ink-3)">chevron_right</span></div>
+          <div class="srow"><div class="ic"><span class="ms s20">settings</span></div><div class="tx grow"><b>Settings</b></div><span class="ms" style="color:var(--ink-3)">chevron_right</span></div>
+        </div>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+    <div class="nav">
+      <a><span class="ms">home</span>Home</a>
+      <a><span class="ms">calendar_month</span>Roadmap</a>
+      <a><span class="ms">smart_toy</span>Chat</a>
+      <a><span class="ms">style</span>Cards</a>
+      <a class="on"><span class="ms">person</span>Profile</a>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="phone">
+  <div class="cap"><b>Settings</b><span>preferences</span></div>
+  <div class="screen"><div class="notch"></div>
+    <div class="sbar"><span class="tnum">9:41</span><span class="r"><span class="ms s18">signal_cellular_alt</span><span class="ms s18">wifi</span><span class="ms s18">battery_full</span></span></div>
+    <div class="view">
+      <div class="bar" style="padding-top:12px;padding-bottom:8px">
+        <span class="round plain"><span class="ms s28" style="color:var(--primary-2)">arrow_back</span></span>
+        <b style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-left:2px">Settings</b>
+      </div>
+      <div class="wrap" style="padding-top:4px">
+        <!-- preferences -->
+        <p style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:6px 4px 8px">Preferences</p>
+        <div class="card" style="padding:6px 20px">
+          <div class="srow"><div class="ic"><span class="ms s20">dark_mode</span></div><div class="tx grow"><b>Dark Mode</b></div><span class="tog" onclick="this.classList.toggle('on');toggleTheme()"></span></div>
+          <div class="srow"><div class="ic"><span class="ms s20">notifications_active</span></div><div class="tx grow"><b>Reminders</b><span class="muted" style="font-size:12px">Daily study nudges</span></div><span class="tog on" onclick="this.classList.toggle('on')"></span></div>
+          <div class="srow"><div class="ic"><span class="ms s20">volume_up</span></div><div class="tx grow"><b>Focus sounds</b></div><span class="tog" onclick="this.classList.toggle('on')"></span></div>
+        </div>
+
+        <div class="card" style="padding:16px 20px">
+          <label style="display:block;font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:8px">Language</label>
+          <div class="inp" style="height:48px;justify-content:space-between"><span style="display:flex;align-items:center;gap:10px"><span class="ms s20">translate</span><input value="English" readonly style="width:auto"></span><span class="ms" style="color:var(--ink-3)">expand_more</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:end;margin:18px 0 8px"><label style="font-size:13px;font-weight:700;color:var(--ink-2)">Font size</label><span class="muted small">Medium</span></div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="muted" style="font-size:13px">A</span>
+            <div class="track" style="flex:1;height:6px;background:var(--card-3)"><i style="width:55%;background:var(--primary)"></i></div>
+            <span style="font-size:20px;font-weight:800;color:var(--ink-2)">A</span>
+          </div>
+        </div>
+
+        <!-- account -->
+        <p style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:14px 4px 8px">Account</p>
+        <div class="card" style="padding:6px 20px">
+          <div class="srow"><div class="ic"><span class="ms s20">lock</span></div><div class="tx grow"><b>Change password</b></div><span class="ms" style="color:var(--ink-3)">chevron_right</span></div>
+          <div class="srow"><div class="ic"><span class="ms s20">download</span></div><div class="tx grow"><b>Export study data</b></div><span class="ms" style="color:var(--ink-3)">chevron_right</span></div>
+          <div class="srow"><div class="ic"><span class="ms s20">help</span></div><div class="tx grow"><b>Help &amp; support</b></div><span class="ms" style="color:var(--ink-3)">chevron_right</span></div>
+        </div>
+
+        <div class="card center" style="background:var(--error-soft);padding:18px 20px">
+          <p class="muted" style="font-size:13px;margin-bottom:12px">Need a break from studying?</p>
+          <button class="btn danger"><span class="ms s20">logout</span>Log out</button>
+        </div>
+        <p class="center muted" style="font-size:12px;margin-top:6px">StudyBuddy v1.0 · made for Charusat SGP</p>
+        <div style="height:6px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="foot">StudyBuddy — AI-powered exam-prep planner · design mockups for the SGP proposal · Flutter build target</div>
+
+<script>
+function toggleTheme(){
+  const r=document.documentElement, dark=r.getAttribute('data-theme')==='dark';
+  r.setAttribute('data-theme',dark?'light':'dark');
+  document.getElementById('ticon').textContent=dark?'dark_mode':'light_mode';
+  document.getElementById('tlbl').textContent=dark?'Dark':'Light';
+}
+</script>
+</body>
+</html>
+
