@@ -7,8 +7,8 @@ existing Flutter UI.
 ```
 supabase/
   config.toml          # local/dev project config
-  migrations/          # ordered SQL — apply 0001 → 0006
-  all_migrations.sql   # GENERATED: all six concatenated, for the SQL editor
+  migrations/          # ordered SQL — apply 0001 → 0009
+  all_migrations.sql   # GENERATED: all nine concatenated, for the SQL editor
   functions/           # Edge Functions (Phase C)
 ```
 
@@ -22,8 +22,18 @@ supabase/
 | `0004_functions.sql` | `handle_new_user()` trigger, `match_material_chunks()` (RAG), `get_class_leaderboard()`, `apply_sr_grade()` (SM-2) |
 | `0005_storage.sql` | Private `materials` bucket + `/{uid}/…` prefix policies |
 | `0006_seed.sql` | 10 badges + one default class (`CE-A 2025`) |
+| `0007_activity.sql` | `activity_log` roll-up, streak advance, `finish_quiz_attempt()` |
+| `0008_rewards.sql` | **Security.** `app_private` schema, `xp_rules`, server-derived XP + badge evaluation, column-level privileges. Closes REVIEW.md P0 |
+| `0009_atomicity.sql` | `create_goal()` (three writes → one transaction), retryable material ingest. Closes REVIEW.md P1 |
 
 All files are idempotent — safe to re-run.
+
+> **0008 is not optional.** It *drops* `award_xp`, `log_activity`, and
+> `unlock_badge`, and the app no longer calls them. A project still on 0007 will
+> 404 on `complete_task` / `record_focus_session` / `evaluate_badges`; a project
+> on 0008 running an older build of the app will fail on the dropped RPCs. Apply
+> it and ship the matching build together.
+
 
 ## Setup
 
@@ -105,4 +115,11 @@ It is a plain concatenation of `migrations/*.sql` in filename order:
 
 ```bash
 cat supabase/migrations/*.sql > supabase/all_migrations.sql
+```
+
+Verify it by byte count — the output must equal the sum of the parts, which is
+what proves nothing was reordered or dropped:
+
+```bash
+python -c "import glob,os;p=sorted(glob.glob('supabase/migrations/0*.sql'));print(sum(os.path.getsize(f) for f in p), os.path.getsize('supabase/all_migrations.sql'))"
 ```

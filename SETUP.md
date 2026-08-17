@@ -17,7 +17,9 @@ Open **SQL Editor** → **New query** → paste the entire contents of
 `supabase/all_migrations.sql` → **Run**.
 
 You should see `Success. No rows returned`. Verify under **Table Editor**:
-23 tables including `profiles`, `goals`, `material_chunks`, `flashcards`.
+24 tables including `profiles`, `goals`, `material_chunks`, `flashcards`, and
+`xp_rules` (the XP amounts — if that one is missing, the security migration
+didn't run and the app's reward RPCs will 404).
 
 If the `vector` extension errors, enable it first under
 **Database → Extensions** (search "vector"), then re-run. The script is

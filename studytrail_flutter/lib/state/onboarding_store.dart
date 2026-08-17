@@ -30,9 +30,14 @@ class OnboardingStore extends AsyncStore {
         _uploaded = await _materials.getMaterials();
       });
 
-  /// Opens the system picker and uploads whatever was chosen. Returns the
-  /// number of files stored — 0 means the user backed out, which is not an
-  /// error, so the caller shouldn't show a failure message for it.
+  /// Opens the system picker and uploads whatever was chosen. Returns how many
+  /// files actually landed.
+  ///
+  /// 0 with no [error] means the user backed out, which isn't a failure and
+  /// shouldn't produce a message. 0 with an error means the first file failed;
+  /// a non-zero count with an error means the batch stopped partway, and those
+  /// files really are stored — reporting 0 there would have told the student
+  /// nothing happened while [uploaded] showed otherwise.
   Future<int> pickAndUpload(MaterialType sourceType) async {
     final result = await FilePicker.pickFiles(
       allowMultiple: true,
@@ -51,7 +56,7 @@ class OnboardingStore extends AsyncStore {
     if (picked.isEmpty) return 0;
 
     var stored = 0;
-    final ok = await runMutation(() async {
+    await runMutation(() async {
       for (final file in picked) {
         final saved = await _materials.uploadFile(
           file: File(file.path!),
@@ -62,7 +67,7 @@ class OnboardingStore extends AsyncStore {
         stored++;
       }
     });
-    return ok ? stored : 0;
+    return stored;
   }
 
   Future<bool> addLink(String url, {String? title}) => runMutation(() async {

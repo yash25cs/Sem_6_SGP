@@ -3,6 +3,10 @@ import '../supabase_client.dart';
 
 /// Reads and writes `profiles`. The row itself is created server-side by the
 /// `handle_new_user` trigger, so this never inserts.
+///
+/// `level`, `xp`, and `xp_to_next` are deliberately absent: 0008_rewards.sql
+/// revokes the client's UPDATE privilege on those columns, and XP is granted
+/// only by the reward RPCs.
 class ProfileRepository {
   const ProfileRepository();
 
@@ -31,33 +35,6 @@ class ProfileRepository {
           'updated_at': DateTime.now().toIso8601String(),
         })
         .eq('id', uid)
-        .select()
-        .single();
-    return Profile.fromMap(row);
-  }
-
-  /// Adds XP and levels up when the threshold is crossed. Done read-then-write
-  /// because there's no server-side XP function yet; a single user's own
-  /// writes don't race in practice.
-  Future<Profile> addXp(int amount) async {
-    final profile = await getMyProfile();
-    if (profile == null) throw StateError('No profile row for this user.');
-
-    var xp = profile.xp + amount;
-    var level = profile.level;
-    var toNext = profile.xpToNext;
-
-    while (xp >= toNext) {
-      xp -= toNext;
-      level += 1;
-      // Each level costs 20% more than the last.
-      toNext = (toNext * 1.2).round();
-    }
-
-    final row = await db
-        .from('profiles')
-        .update({'xp': xp, 'level': level, 'xp_to_next': toNext})
-        .eq('id', profile.id)
         .select()
         .single();
     return Profile.fromMap(row);

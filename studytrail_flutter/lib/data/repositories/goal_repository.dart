@@ -30,35 +30,33 @@ class GoalRepository {
     return rows.map(Goal.fromMap).toList();
   }
 
-  /// Creates a goal and its subjects. `user_id` comes from the session, never
-  /// from the caller. Marks any previous goal inactive so there's one focus.
+  /// Creates a goal and its subjects, and retires the previously active one.
+  ///
+  /// All three writes happen inside the `create_goal` RPC, so they succeed or
+  /// fail together. Doing them here as three calls left a real failure mode: a
+  /// drop after the first one deactivated the old goal but never created the
+  /// new one, and the student was left with no active goal and no way to notice
+  /// (REVIEW.md P1). `user_id` comes from the JWT inside the function, so it
+  /// isn't sent.
   Future<Goal> createGoal({
     required String name,
     DateTime? examDate,
     Pace pace = Pace.steady,
     List<String> subjectNames = const [],
   }) async {
-    final uid = requireUserId;
-
-    await db.from('goals').update({'is_active': false}).eq('is_active', true);
-
-    final draft = Goal(id: '', name: name, examDate: examDate, pace: pace);
-    final row = await db
-        .from('goals')
-        .insert({...draft.toInsertMap(), 'user_id': uid})
-        .select()
-        .single();
-    final goal = Goal.fromMap(row);
-
-    if (subjectNames.isNotEmpty) {
-      final rows = [
+    final row = await db.rpc('create_goal', params: {
+      'p_name': name,
+      // date column → date-only, not a full timestamp.
+      'p_exam_date': examDate?.toIso8601String().split('T').first,
+      'p_pace': pace.db,
+      'p_subjects': [
         for (final n in subjectNames)
-          if (n.trim().isNotEmpty)
-            {'user_id': uid, 'goal_id': goal.id, 'name': n.trim()},
-      ];
-      if (rows.isNotEmpty) await db.from('subjects').insert(rows);
-    }
-    return goal;
+          if (n.trim().isNotEmpty) n.trim(),
+      ],
+    });
+    return Goal.fromMap(
+      row is List ? row.first as Map<String, dynamic> : row as Map<String, dynamic>,
+    );
   }
 
   /// Updates the fields that were passed and returns the saved row, so callers

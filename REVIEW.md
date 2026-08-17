@@ -3,6 +3,10 @@
 This review is read-only: no production code was changed. Items are ordered by
 impact and should be resolved before adding new user-facing features.
 
+**Status lines added 17 August 2026** record what has since been fixed. Two
+findings remain open: the chat tab still promises answers no Edge Function
+generates (P1), and there are still no meaningful tests (P2).
+
 ## P0 — Prevent direct reward and badge manipulation
 
 `award_xp(amount)`, `log_activity(minutes, tasks, xp)`, and
@@ -23,6 +27,16 @@ and derive all rewards server-side. Do not accept raw XP or badge keys from a
 client as proof of achievement.
 
 **Relevant files:** `supabase/migrations/0007_activity.sql` lines 14, 63, 161.
+
+**Status — fixed, `supabase/migrations/0008_rewards.sql`.** All three functions
+are dropped from `public` and re-created in `app_private`, a schema PostgREST
+does not expose and `anon`/`authenticated` have no `USAGE` on. XP is now derived
+from rows the server can verify, and the finding turned out to be wider than
+described: the same forgery was reachable straight through PostgREST
+(`PATCH /profiles {xp:999999}`, `POST /activity_log`, `POST /user_badges`)
+because no migration granted or revoked anything. Table and column privileges
+are now narrowed — checked *before* RLS, so they can do what a policy cannot.
+`ProfileRepository.addXp` and the old `unlockBadge` were deleted with them.
 
 ## P1 — Make multi-step writes atomic or recoverable
 
@@ -47,6 +61,15 @@ database insert fails and retain a retryable `failed` status for ingestion.
 - `studytrail_flutter/lib/data/repositories/goal_repository.dart` line 35
 - `studytrail_flutter/lib/state/home_store.dart` line 69
 - `studytrail_flutter/lib/data/repositories/material_repository.dart`
+
+**Status — fixed.** Goal creation is one `create_goal` RPC
+(`0009_atomicity.sql`); task completion plus its milestone mirror and reward is
+one `complete_task` RPC (`0008_rewards.sql`). Storage can't join a Postgres
+transaction, so `uploadFile` now removes the object it just wrote if the
+`materials` insert fails, and `deleteMaterial` drops the row *before* the object
+— an orphaned object costs storage, an orphaned row breaks the screen.
+`materials.status` is client-settable except for `embedded`, which a trigger
+rejects unless embedded chunks exist, so a failed ingest is retryable.
 
 ## P1 — Do not promise AI answers before the AI service exists
 
@@ -73,6 +96,12 @@ and offer retry. Alternatively wait for a successful grade before advancing.
 
 **Relevant file:** `studytrail_flutter/lib/state/flashcard_store.dart` line 59.
 
+**Status — fixed.** The advance stays optimistic, but a failed grade puts the
+card back on the end of the queue and decrements the session counter, so it
+comes round again instead of disappearing. Re-queued at the end rather than at
+its old index: by the time the failure returns the student may have graded
+further cards, and yanking the view backwards would be worse than the wait.
+
 ## P2 — Add parent-ownership integrity checks
 
 Most policies validate only `auth.uid() = user_id`. A modified client can still
@@ -85,6 +114,17 @@ prefer RPCs that derive parent ids from rows already owned by the caller.
 
 **Relevant files:** `supabase/migrations/0001_init_schema.sql`,
 `supabase/migrations/0002_features.sql`, `supabase/migrations/0003_rls.sql`.
+
+**Status — largely fixed, by removing the write rather than policing it.** The
+paths that cross a parent boundary now go through RPCs that check it:
+`record_focus_session` rejects a subject that isn't the caller's,
+`finish_quiz_attempt` matches every question to the caller, `complete_task`
+derives the milestone task from the row it just read, `create_goal` derives
+`goal_id` from the goal it just inserted. Everything else was narrowed instead:
+roadmap, quiz, and quiz-question rows are no longer client-insertable at all
+(they're generated artefacts), so there is nothing left to point at a stranger's
+parent. Chat threads/messages are the remaining gap and close in Phase C, when
+the `chat` function becomes the only writer.
 
 ## P2 — Make XP semantics consistent
 
@@ -99,6 +139,12 @@ define the XP rules in one documented location.
 `studytrail_flutter/lib/state/pomodoro_store.dart`,
 `studytrail_flutter/lib/state/flashcard_store.dart`.
 
+**Status — fixed, `0008_rewards.sql`.** Every reward path now calls both
+`log_activity` and `award_xp`, so `activity_log.xp_earned` and `profiles.xp` can
+no longer disagree. The amounts live in one readable table, `xp_rules`, which is
+also the ceiling applied to the client-writable `quiz_questions.xp_reward`. The
+four `logActivity(xp: …)` calls the stores used to make are gone.
+
 ## P2 — Establish meaningful automated tests and source control
 
 There is one smoke widget test. No repository, store, migration/RLS, or
@@ -110,6 +156,12 @@ signup bootstrap, RLS isolation, XP restrictions, goal creation rollback,
 flashcard grading failure, and the onboarding-to-home path.
 
 **Relevant file:** `studytrail_flutter/test/widget_test.dart` line 8.
+
+**Status — half done, and the open half.** Git is initialised with a GitHub
+remote (three commits as of the baseline push). The tests are not written; the
+smoke test is still the only one. This is the next piece of work, and the
+reward RPCs added in 0008 are the first thing that needs covering — they are
+the code most likely to be attacked and the code no test currently touches.
 
 ## Suggested delivery order
 

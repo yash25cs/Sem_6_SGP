@@ -45,22 +45,18 @@ class RoadmapRepository {
     return state;
   }
 
-  /// Overall completion across a goal's roadmap tasks, also persisted onto
-  /// `goals.overall_percent` so Home can read it without recomputing.
+  /// Overall completion across a goal's roadmap tasks, counted and persisted by
+  /// the `recompute_goal_progress` RPC.
+  ///
+  /// Deliberately not computed here: `goals.overall_percent` is the input to the
+  /// goal_crusher badge, so it isn't the client's to assert. 0008_rewards.sql
+  /// revokes UPDATE on that column.
   Future<double> recomputeGoalProgress(String goalId) async {
-    final rows = await db
-        .from('milestone_tasks')
-        .select('done, milestones!inner(goal_id)')
-        .eq('milestones.goal_id', goalId);
-
-    if (rows.isEmpty) return 0;
-    final done = rows.where((r) => (r['done'] as bool?) ?? false).length;
-    final percent = (done / rows.length) * 100;
-
-    await db
-        .from('goals')
-        .update({'overall_percent': percent}).eq('id', goalId);
-    return percent;
+    final result = await db.rpc(
+      'recompute_goal_progress',
+      params: {'p_goal': goalId},
+    );
+    return (result as num?)?.toDouble() ?? 0;
   }
 
   Future<void> deleteMilestones(String goalId) =>

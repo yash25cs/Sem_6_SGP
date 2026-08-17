@@ -50,22 +50,25 @@ class TaskRepository {
     return DailyTask.fromMap(row);
   }
 
-  /// Flips a task's done state. Also mirrors it onto the linked roadmap task
-  /// so the two screens agree.
+  /// Flips a task's done state through the `complete_task` RPC.
+  ///
+  /// The RPC also mirrors the linked roadmap checkbox and pays out XP — in one
+  /// transaction, and only for a task's *first* completion, so re-ticking is
+  /// worth nothing. Doing the mirror here as a second call could leave the two
+  /// screens disagreeing if it failed.
   Future<DailyTask> setDone(DailyTask task, bool done) async {
-    final row = await db
-        .from('daily_tasks')
-        .update({'done': done, 'tag': done ? TaskTag.done.db : TaskTag.now.db})
-        .eq('id', task.id)
-        .select('*, subjects(name)')
-        .single();
-
-    if (task.milestoneTaskId != null) {
-      await db
-          .from('milestone_tasks')
-          .update({'done': done}).eq('id', task.milestoneTaskId!);
-    }
-    return DailyTask.fromMap(row);
+    final row = await db.rpc('complete_task', params: {
+      'p_task': task.id,
+      'p_done': done,
+    });
+    final saved = DailyTask.fromMap(
+      row is List
+          ? row.first as Map<String, dynamic>
+          : row as Map<String, dynamic>,
+    );
+    // The RPC returns a bare row, so keep the subject name the list is already
+    // showing — a done-toggle can't have changed it.
+    return task.copyWith(done: saved.done, tag: saved.tag);
   }
 
   Future<void> deleteTask(String taskId) =>

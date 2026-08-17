@@ -48,6 +48,14 @@ String friendlyError(Object error) {
         return 'You do not have access to that.';
       case 'PGRST116':
         return 'Not found.';
+      // PostgREST could not find the function or table the app asked for. That
+      // is never a data problem — it means the project is running an older set
+      // of migrations than this build, so say the one thing that fixes it
+      // instead of surfacing "in the schema cache" to a student.
+      case 'PGRST202':
+      case 'PGRST205':
+        return 'This build needs a newer database. Apply '
+            'supabase/all_migrations.sql in the Supabase SQL editor.';
     }
     return error.message;
   }

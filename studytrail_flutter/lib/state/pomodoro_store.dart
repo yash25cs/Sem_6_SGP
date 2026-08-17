@@ -204,6 +204,8 @@ class PomodoroStore extends AsyncStore {
     }
   }
 
+  /// One completed focus block. `recordSession` derives the XP from the minutes
+  /// server-side, so the store never names an amount.
   Future<void> _logSession(int minutes) async {
     await runMutation(() async {
       await _game.recordSession(
@@ -211,7 +213,6 @@ class PomodoroStore extends AsyncStore {
         lengthMin: minutes,
         focusedMin: minutes,
       );
-      await _game.logActivity(minutes: minutes, xp: minutes);
     });
   }
 

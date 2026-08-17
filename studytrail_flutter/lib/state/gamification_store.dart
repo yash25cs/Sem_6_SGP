@@ -17,6 +17,7 @@ class GamificationStore extends AsyncStore {
   List<AchievementBadge> _badges = const [];
   List<LeaderboardEntry> _leaderboard = const [];
   List<ActivityDay> _recent = const [];
+  List<String> _newlyUnlocked = const [];
 
   Profile? get profile => _profile;
   Streak get streak => _streak;
@@ -24,6 +25,10 @@ class GamificationStore extends AsyncStore {
   List<AchievementBadge> get unlockedBadges =>
       _badges.where((b) => b.unlocked).toList();
   List<LeaderboardEntry> get leaderboard => _leaderboard;
+
+  /// Badge keys this load unlocked for the first time — empty on every visit
+  /// after the one that earned them.
+  List<String> get newlyUnlocked => _newlyUnlocked;
 
   int get unlockedCount => unlockedBadges.length;
 
@@ -48,6 +53,21 @@ class GamificationStore extends AsyncStore {
       _leaderboard.where((e) => e.isMe).firstOrNull;
 
   Future<void> load() => runLoad(() async {
+        // Catch up on badges first, so anything earned since the last visit is
+        // already unlocked in the rows read below. The reward RPCs run the same
+        // server-side check, so this only picks up the conditions no reward
+        // touches — roadmap generated, questions asked, goal finished.
+        //
+        // Guarded because this is the first await in the load: a project still
+        // on 0007 has no `evaluate_badges`, and letting that 404 escape would
+        // blank the whole screen — streak, badges, and activity all read fine
+        // without it. Catching up is an optimisation, not the data.
+        try {
+          _newlyUnlocked = await _game.evaluateBadges();
+        } catch (_) {
+          _newlyUnlocked = const [];
+        }
+
         final results = await Future.wait([
           _profiles.getMyProfile(),
           _game.getStreak(),

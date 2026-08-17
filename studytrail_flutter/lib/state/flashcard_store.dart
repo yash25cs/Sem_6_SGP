@@ -5,12 +5,10 @@ import 'async_store.dart';
 /// Backs the Flashcards screen: the deck list and a review session over the
 /// cards that are due.
 class FlashcardStore extends AsyncStore {
-  FlashcardStore({FlashcardRepository? cards, GamificationRepository? game})
-      : _cards = cards ?? const FlashcardRepository(),
-        _game = game ?? const GamificationRepository();
+  FlashcardStore({FlashcardRepository? cards})
+      : _cards = cards ?? const FlashcardRepository();
 
   final FlashcardRepository _cards;
-  final GamificationRepository _game;
 
   List<FlashcardDeck> _decks = const [];
   List<Flashcard> _queue = const [];
@@ -55,25 +53,39 @@ class FlashcardStore extends AsyncStore {
   }
 
   /// Grades the current card and advances. The new schedule is computed by the
-  /// `apply_sr_grade` RPC, so nothing here duplicates the SM-2 math.
+  /// `apply_sr_grade` RPC, so nothing here duplicates the SM-2 math — and the
+  /// RPC pays out only for a card that was genuinely due, so no XP is named
+  /// here either.
+  ///
+  /// The advance is optimistic: waiting on the network between cards makes
+  /// review feel sluggish. If the grade doesn't land, the card goes back on the
+  /// end of the queue rather than vanishing — it's still due in the database,
+  /// and silently dropping it meant the session claimed a review that never
+  /// happened (REVIEW.md P1).
   Future<void> grade(SrGrade grade) async {
     final card = current;
     if (card == null) return;
 
-    // Advance immediately — waiting on the network between cards makes review
-    // feel sluggish, and a failed grade is recoverable (the card stays due).
     _index++;
     _revealed = false;
     _reviewedThisSession++;
     notifyListeners();
 
-    await runMutation(() async {
+    final ok = await runMutation(() async {
       await _cards.gradeCard(card, grade);
       if (sessionFinished) {
-        await _game.logActivity(minutes: 0, xp: _reviewedThisSession);
         _decks = await _cards.getDecks();
       }
     });
+
+    if (!ok) {
+      // Re-queued at the end, not back at _index: by now the student may have
+      // graded further cards, and yanking the view backwards mid-review would
+      // be worse than seeing this one again in a moment.
+      _reviewedThisSession--;
+      _queue = [..._queue, card];
+      notifyListeners();
+    }
   }
 
   Future<bool> createDeck(String name, {String? subjectId}) =>

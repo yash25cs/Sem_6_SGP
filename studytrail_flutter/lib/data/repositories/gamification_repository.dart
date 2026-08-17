@@ -2,8 +2,12 @@ import '../../models/models.dart';
 import '../supabase_client.dart';
 
 /// Streaks, XP, badges, leaderboard, and study sessions — the gamification
-/// layer. Heavy lifting is done by the RPCs in
-/// `supabase/migrations/0007_activity.sql`; this repository mostly reads.
+/// layer.
+///
+/// Reads only, plus two RPCs. Nothing here writes XP, activity, or a badge
+/// directly: `0008_rewards.sql` revokes the client's INSERT/UPDATE on
+/// `activity_log`, `streaks`, `user_badges`, and `study_sessions`, so the
+/// reward RPCs are the only path in.
 class GamificationRepository {
   const GamificationRepository();
 
@@ -16,28 +20,6 @@ class GamificationRepository {
     return row == null
         ? const Streak()
         : Streak.fromMap(row);
-  }
-
-  /// Grants XP and returns the updated profile. Server-side `award_xp` is
-  /// atomic, so concurrent grants never lose each other's increments.
-  Future<Profile> awardXp(int amount) async {
-    final row = await db.rpc('award_xp', params: {'amount': amount});
-    return Profile.fromMap(
-      row is List ? row.first as Map<String, dynamic> : row as Map<String, dynamic>,
-    );
-  }
-
-  /// Records minutes/tasks/XP for today and rolls the streak forward.
-  Future<void> logActivity({
-    int minutes = 0,
-    int tasks = 0,
-    int xp = 0,
-  }) async {
-    await db.rpc('log_activity', params: {
-      'minutes': minutes,
-      'tasks': tasks,
-      'xp': xp,
-    });
   }
 
   /// Last 60 days of activity for the heatmap and weekly bars.
@@ -66,10 +48,17 @@ class GamificationRepository {
     return onlyUnlocked ? all.where((b) => b.unlocked).toList() : all;
   }
 
-  /// Idempotent unlock; true only the first time — the cue for the toast.
-  Future<bool> unlockBadge(String badgeKey) async {
-    final row = await db.rpc('unlock_badge', params: {'badge_key': badgeKey});
-    return row == true;
+  /// Re-checks every badge condition against the database and unlocks whatever
+  /// is genuinely earned, returning the keys unlocked *by this call* — the cue
+  /// for an "unlocked!" toast.
+  ///
+  /// Replaces the old `unlock_badge(key)` RPC, which took the client's word for
+  /// which badge to grant. The reward RPCs run the same check server-side, so
+  /// this is only needed for conditions no reward touches (roadmap generated,
+  /// questions asked, goal finished).
+  Future<List<String>> evaluateBadges() async {
+    final result = await db.rpc('evaluate_badges');
+    return (result as List?)?.cast<String>() ?? const [];
   }
 
   /// Classmates ordered by XP. `is_me` comes from the RPC; rank is assigned
@@ -94,27 +83,27 @@ class GamificationRepository {
     return rows.map(StudySession.fromMap).toList();
   }
 
-  /// Persists one finished Pomodoro block and grants its XP in one shot.
+  /// Persists one finished Pomodoro block.
+  ///
+  /// `record_focus_session` validates the length, rejects a subject that isn't
+  /// the caller's, caps the day's logged focus, then derives the XP from the
+  /// minutes — so the client reports what it did, not what it earned. The
+  /// returned row has no embedded subject name; re-read the list if you need it.
   Future<StudySession> recordSession({
     String? subjectId,
     int? lengthMin,
-    int sessionsCount = 1,
     int? focusedMin,
   }) async {
-    final row = await db
-        .from('study_sessions')
-        .insert({
-          'user_id': requireUserId,
-          'subject_id': ?subjectId,
-          'length_min': ?lengthMin,
-          'sessions_count': sessionsCount,
-          'focused_min': ?focusedMin,
-          'started_at': DateTime.now().toUtc().toIso8601String(),
-          'ended_at': DateTime.now().toUtc().toIso8601String(),
-        })
-        .select('*, subjects(name)')
-        .single();
-    return StudySession.fromMap(row);
+    final row = await db.rpc('record_focus_session', params: {
+      'p_subject': subjectId,
+      'p_length_min': lengthMin ?? 25,
+      'p_focused_min': focusedMin,
+    });
+    return StudySession.fromMap(
+      row is List
+          ? row.first as Map<String, dynamic>
+          : row as Map<String, dynamic>,
+    );
   }
 
   static String _dateOnly(DateTime d) =>

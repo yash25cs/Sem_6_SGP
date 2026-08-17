@@ -60,13 +60,26 @@ class RoadmapStore extends AsyncStore {
         for (final m in _milestones)
           m.id == milestone.id ? m.copyWith(state: state) : m,
       ];
-      final goalId = _goal?.id;
-      if (goalId != null) await _roadmap.recomputeGoalProgress(goalId);
     });
 
     if (!ok) {
       _milestones = before;
       notifyListeners();
+      return;
+    }
+
+    // Deliberately outside the mutation. The checkbox is already saved by this
+    // point, so letting a failed recompute fail the whole call would revert the
+    // tick in the UI while the database keeps it — the screen would then lie
+    // until the next load. `overallProgress` is derived locally anyway; the RPC
+    // only persists `goals.overall_percent` for the goal_crusher badge.
+    final goalId = _goal?.id;
+    if (goalId != null) {
+      try {
+        await _roadmap.recomputeGoalProgress(goalId);
+      } catch (_) {
+        // Stale by one tick until the next toggle or load recomputes it.
+      }
     }
   }
 }

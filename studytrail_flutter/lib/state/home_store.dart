@@ -66,6 +66,9 @@ class HomeStore extends AsyncStore {
 
   /// Flips a checkbox optimistically, then persists. Reverts on failure so the
   /// UI never claims a write succeeded when it didn't.
+  ///
+  /// Activity, XP, the streak, and any badge it earns are all rolled into the
+  /// `complete_task` RPC, so there's nothing to log from here.
   Future<void> toggleTask(DailyTask task) async {
     final next = !task.done;
     final before = _tasksToday;
@@ -82,16 +85,22 @@ class HomeStore extends AsyncStore {
       _tasksToday = [
         for (final t in _tasksToday) t.id == saved.id ? saved : t,
       ];
-      // Completing a task counts toward the day's activity and streak.
-      if (next) await _game.logActivity(tasks: 1, minutes: task.durationMin ?? 0);
     });
 
     if (!ok) {
       _tasksToday = before;
       notifyListeners();
     } else if (next) {
-      _streak = await _game.getStreak();
-      notifyListeners();
+      // The RPC rolled the streak forward; re-read it for the header chip.
+      // Guarded because this sits outside the mutation — the tick is already
+      // saved, and `toggleTask` returns void, so a throw here would surface as
+      // an unhandled async error rather than as a failed write.
+      try {
+        _streak = await _game.getStreak();
+        notifyListeners();
+      } catch (_) {
+        // Header chip stays on the previous count until the next load.
+      }
     }
   }
 

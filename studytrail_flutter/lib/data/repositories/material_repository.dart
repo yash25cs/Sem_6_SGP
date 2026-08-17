@@ -24,6 +24,11 @@ class MaterialRepository {
   /// Uploads a picked file and records it. The object key is always
   /// `{uid}/{timestamp}_{filename}` — the Storage policies key off that first
   /// segment, so it must stay the user's id.
+  ///
+  /// Storage and Postgres can't share a transaction, so the row insert is
+  /// wrapped in compensating cleanup: if it fails, the object just written is
+  /// removed again. Without it every failed upload left a paid-for object in the
+  /// bucket that nothing referenced and no screen could ever show (REVIEW.md P1).
   Future<StudyMaterial> uploadFile({
     required File file,
     required String fileName,
@@ -37,19 +42,30 @@ class MaterialRepository {
 
     await db.storage.from(SupabaseConfig.materialsBucket).upload(path, file);
 
-    final row = await db
-        .from('materials')
-        .insert({
-          'user_id': uid,
-          'source_type': sourceType.db,
-          'title': fileName,
-          'storage_path': path,
-          'status': IngestStatus.uploaded.db,
-          'goal_id': ?goalId,
-        })
-        .select()
-        .single();
-    return StudyMaterial.fromMap(row);
+    try {
+      final row = await db
+          .from('materials')
+          .insert({
+            'user_id': uid,
+            'source_type': sourceType.db,
+            'title': fileName,
+            'storage_path': path,
+            'status': IngestStatus.uploaded.db,
+            'goal_id': ?goalId,
+          })
+          .select()
+          .single();
+      return StudyMaterial.fromMap(row);
+    } catch (_) {
+      // Best-effort: if the cleanup itself fails there is nothing further the
+      // client can do, and the insert error is the one worth surfacing.
+      try {
+        await db.storage.from(SupabaseConfig.materialsBucket).remove([path]);
+      } catch (_) {
+        // Swallowed deliberately — see above.
+      }
+      rethrow;
+    }
   }
 
   /// Records a video/article link — nothing to upload.
@@ -83,12 +99,45 @@ class MaterialRepository {
         .map((rows) => StudyMaterial.fromMap(rows.first));
   }
 
+  /// Records that ingestion didn't happen, so the row reads as retryable rather
+  /// than sitting on `uploaded` looking like it's still queued.
+  ///
+  /// Called when the `embed-material` invocation itself fails — a function that
+  /// never ran can't mark its own failure.
+  Future<void> markIngestFailed(String materialId) =>
+      _setStatus(materialId, IngestStatus.failed);
+
+  /// Puts a failed material back in the queue. The caller re-invokes
+  /// `embed-material` afterwards; this only resets the row the UI reads.
+  ///
+  /// `embedded` is deliberately not settable from here — 0009_atomicity.sql has
+  /// a trigger that rejects it unless embedded chunks actually exist.
+  Future<StudyMaterial> retryIngest(String materialId) =>
+      _setStatus(materialId, IngestStatus.uploaded);
+
+  Future<StudyMaterial> _setStatus(String id, IngestStatus status) async {
+    final row = await db
+        .from('materials')
+        .update({'status': status.db})
+        .eq('id', id)
+        .select()
+        .single();
+    return StudyMaterial.fromMap(row);
+  }
+
+  /// Deletes the row first, then the object.
+  ///
+  /// That order matters: a row whose object is already gone breaks preview and
+  /// re-ingestion with no way for the student to clear it, whereas an object
+  /// whose row is gone is invisible and costs only storage. If the two can't
+  /// both succeed, leave the recoverable failure.
   Future<void> deleteMaterial(StudyMaterial material) async {
+    await db.from('materials').delete().eq('id', material.id);
+
     final path = material.storagePath;
     if (path != null) {
       await db.storage.from(SupabaseConfig.materialsBucket).remove([path]);
     }
-    await db.from('materials').delete().eq('id', material.id);
   }
 
   /// Signed URL for previewing a private object.

@@ -67,10 +67,15 @@ class _UploadMaterialScreenState extends State<UploadMaterialScreen> {
     final store = context.read<OnboardingStore>();
     final count = await store.pickAndUpload(_type);
     if (!mounted) return;
-    if (count > 0) {
+
+    final failure = store.error;
+    if (failure != null) {
+      // A non-zero count alongside an error means the batch stopped partway.
+      // Say both halves — the file list below already shows what landed, and a
+      // plain "3 files uploaded" would contradict it.
+      _toast(count == 0 ? failure : '$count uploaded, then: $failure');
+    } else if (count > 0) {
       _toast(count == 1 ? 'File uploaded' : '$count files uploaded');
-    } else if (store.error != null) {
-      _toast(store.error!);
     }
   }
 
