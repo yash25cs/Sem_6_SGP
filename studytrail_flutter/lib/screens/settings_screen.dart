@@ -10,6 +10,7 @@ import '../theme/theme_controller.dart';
 import '../widgets/common.dart';
 import '../widgets/data_states.dart';
 import '../widgets/nav.dart';
+import 'set_target_screen.dart';
 
 /// Full settings screen — grouped preference rows with a back button.
 ///
@@ -89,11 +90,157 @@ class _SettingsScreenState extends State<SettingsScreen> {
     college.dispose();
   }
 
-  Future<void> _editGoalName() async {
+  /// The goal manager — a row per goal, plus a way to add one.
+  ///
+  /// Replaces a dead end: the three Study rows used to toast "Set a study goal
+  /// first" with no way to actually set one.
+  Future<void> _manageGoals() async {
     final store = context.read<ProfileStore>();
-    final goal = store.activeGoal;
+    final p = context.p;
+
+    if (store.allGoals.isEmpty) {
+      await _newGoal();
+      return;
+    }
+
+    final activeId = store.activeGoal?.id;
+    final picked = await _showSheet<(String, String)>(
+      title: 'Your study goals',
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('One goal per exam. StudyTrail plans against the active one.',
+              style: TextStyle(color: p.ink3, fontSize: 12.5)),
+          const SizedBox(height: 6),
+          for (final g in store.allGoals)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Symbols.flag,
+                  color: g.id == activeId ? p.primary : p.ink3),
+              title: Text(g.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: p.ink,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                  '${_dateLabel(g.examDate)} · ${g.pace.label}'
+                  '${g.id == activeId ? ' · active' : ''}',
+                  style: TextStyle(color: p.ink3, fontSize: 12)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (g.id != activeId)
+                    IconButton(
+                      tooltip: 'Make active',
+                      icon: Icon(Symbols.check_circle, color: p.primary),
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(('activate', g.id)),
+                    ),
+                  IconButton(
+                    tooltip: 'Rename',
+                    icon: Icon(Symbols.edit, color: p.ink3),
+                    onPressed: () =>
+                        Navigator.of(sheetContext).pop(('rename', g.id)),
+                  ),
+                  IconButton(
+                    tooltip: 'Delete',
+                    icon: Icon(Symbols.delete, color: p.error),
+                    onPressed: () =>
+                        Navigator.of(sheetContext).pop(('delete', g.id)),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 10),
+          PillButton('Add a study goal',
+              icon: Symbols.add,
+              onTap: () => Navigator.of(sheetContext).pop(('new', ''))),
+        ],
+      ),
+    );
+
+    if (picked == null || !mounted) return;
+    final (action, goalId) = picked;
+
+    switch (action) {
+      case 'new':
+        await _newGoal();
+      case 'activate':
+        final ok = await store.setActiveGoal(goalId);
+        _toast(ok ? 'Goal switched' : store.error ?? 'Could not switch goal');
+      case 'rename':
+        await _editGoalName(goalId: goalId);
+      case 'delete':
+        await _confirmDeleteGoal(goalId);
+    }
+  }
+
+  /// Opens the goal form. Same screen as onboarding step 3 — `create_goal`
+  /// retires the previous active goal, so the new one takes over.
+  Future<void> _newGoal() async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (routeContext) => SetTargetScreen(
+        stepLabel: 'New goal',
+        title: 'New study goal',
+        onDone: () => Navigator.of(routeContext).pop(),
+        onBack: () => Navigator.of(routeContext).pop(),
+      ),
+    ));
+    if (!mounted) return;
+    await context.read<ProfileStore>().reloadGoals();
+    // Home reads the same rows through its own store.
+    if (mounted) await context.read<HomeStore>().load();
+  }
+
+  Future<void> _confirmDeleteGoal(String goalId) async {
+    final store = context.read<ProfileStore>();
+    final goal = store.allGoals.where((g) => g.id == goalId).firstOrNull;
+    if (goal == null) return;
+    final p = context.p;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: p.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Delete “${goal.name}”?',
+            style: TextStyle(
+                color: p.ink, fontSize: 18, fontWeight: FontWeight.w800)),
+        content: Text(
+            'Its subjects, roadmap and tasks go with it. Study sessions you '
+            'already logged are kept.',
+            style: TextStyle(color: p.ink2, fontSize: 14, height: 1.45)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('Cancel', style: TextStyle(color: p.ink3)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('Delete',
+                style: TextStyle(color: p.error, fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final ok = await store.removeGoal(goalId);
+    _toast(ok ? 'Goal deleted' : store.error ?? 'Could not delete');
+    if (ok && mounted) await context.read<HomeStore>().load();
+  }
+
+  /// Renames [goalId], or the active goal when none is named.
+  Future<void> _editGoalName({String? goalId}) async {
+    final store = context.read<ProfileStore>();
+    final goal = goalId == null
+        ? store.activeGoal
+        : store.allGoals.where((g) => g.id == goalId).firstOrNull;
     if (goal == null) {
-      _toast('Set a study goal first.');
+      await _manageGoals();
       return;
     }
 
@@ -112,7 +259,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (saved == true && controller.text.trim().isNotEmpty) {
-      final ok = await store.updateGoal(name: controller.text.trim());
+      final ok = await store.updateGoal(
+          goalId: goal.id, name: controller.text.trim());
       _toast(ok ? 'Goal updated' : store.error ?? 'Could not save');
     }
     controller.dispose();
@@ -122,7 +270,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final store = context.read<ProfileStore>();
     final goal = store.activeGoal;
     if (goal == null) {
-      _toast('Set a study goal first.');
+      // No goal to edit a date on — send them to the one screen that helps.
+      await _manageGoals();
       return;
     }
 
@@ -144,7 +293,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final store = context.read<ProfileStore>();
     final goal = store.activeGoal;
     if (goal == null) {
-      _toast('Set a study goal first.');
+      await _manageGoals();
       return;
     }
 
@@ -309,7 +458,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 20, 6),
             child: Row(
@@ -399,7 +548,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 _GroupLabel('Study'),
                 _Group(children: [
-                  _Row(Symbols.target, 'Study goal', p.primary,
+                  _Row(Symbols.flag, 'Study goals', p.primary,
+                      value: store.allGoals.isEmpty
+                          ? 'Create your first'
+                          : '${store.allGoals.length} goal'
+                              '${store.allGoals.length == 1 ? '' : 's'}',
+                      trailing: _chev(p),
+                      onTap: _manageGoals),
+                  _Row(Symbols.target, 'Active goal', p.primary2,
                       value: goal?.name ?? 'Not set',
                       trailing: _chev(p),
                       onTap: _editGoalName),

@@ -22,12 +22,20 @@ class HomeStore extends AsyncStore {
 
   Profile? _profile;
   Goal? _goal;
+  List<Goal> _allGoals = const [];
   Streak _streak = const Streak();
   List<DailyTask> _tasksToday = const [];
   List<Subject> _subjects = const [];
 
   Profile? get profile => _profile;
+
+  /// The goal every other read on this screen is scoped to.
   Goal? get goal => _goal;
+
+  /// Every goal the student has, newest first — the switcher's list. A student
+  /// can keep several (one per exam) but the app works against one at a time.
+  List<Goal> get allGoals => _allGoals;
+
   Streak get streak => _streak;
   List<DailyTask> get tasks => _tasksToday;
   List<Subject> get subjects => _subjects;
@@ -42,22 +50,36 @@ class HomeStore extends AsyncStore {
       _tasksToday.isEmpty ? 0 : doneCount / _tasksToday.length;
 
   Future<void> load() => runLoad(() async {
-        // Independent reads — run them together rather than four round-trips.
+        // Independent reads — run them together rather than five round-trips.
         final results = await Future.wait([
           _profiles.getMyProfile(),
-          _goals.getActiveGoal(),
+          _goals.getGoals(),
           _tasks.getTodayTasks(),
           _game.getStreak(),
         ]);
         _profile = results[0] as Profile?;
-        _goal = results[1] as Goal?;
+        _allGoals = results[1] as List<Goal>;
         _tasksToday = results[2] as List<DailyTask>;
         _streak = results[3] as Streak;
+
+        // Derived from the full list rather than a separate `getActiveGoal()`
+        // round-trip. Same rule as that query: newest active row wins, so a
+        // half-finished switch still resolves to one goal.
+        _goal = _allGoals.where((g) => g.isActive).firstOrNull;
 
         final goalId = _goal?.id;
         _subjects =
             goalId == null ? const [] : await _goals.getSubjects(goalId);
       });
+
+  /// Switches which goal the app works against, then reloads everything scoped
+  /// to it — tasks stay global, but subjects and the hero card follow the goal.
+  Future<bool> switchGoal(String goalId) async {
+    if (goalId == _goal?.id) return true;
+    final ok = await runMutation(() => _goals.setActiveGoal(goalId));
+    if (ok) await load();
+    return ok;
+  }
 
   Future<void> refresh() async {
     _tasksToday = await _tasks.getTodayTasks();

@@ -18,12 +18,54 @@ String get requireUserId {
   return id;
 }
 
+/// True when a failure is transport-level — DNS, no route, TLS, timeout —
+/// rather than something the server actually answered.
+///
+/// This has to be consulted *before* the type checks in [friendlyError].
+/// gotrue wraps `ClientException`/`SocketException` in
+/// `AuthRetryableFetchException`, which extends `AuthException` and carries the
+/// raw `error.toString()` as its message. So the `AuthException` branch would
+/// otherwise win and hand a student
+/// "ClientException with SocketException: Failed host lookup: … errno = 7".
+bool isNetworkError(Object error) {
+  // AuthRetryableFetchException doubles as gotrue's 5xx wrapper, and those
+  // always carry a statusCode. Transport failures never do.
+  if (error is AuthRetryableFetchException && error.statusCode == null) {
+    return true;
+  }
+  const signatures = <String>[
+    'SocketException',
+    'Failed host lookup',
+    'No address associated with hostname',
+    'ClientException',
+    'HandshakeException',
+    'TimeoutException',
+    'Connection refused',
+    'Connection reset',
+    'Connection closed',
+    'Network is unreachable',
+  ];
+  final text = error.toString();
+  return signatures.any(text.contains);
+}
+
 /// Turns Supabase/Postgres errors into something worth showing a student.
 ///
 /// Postgres error codes we care about:
 /// `23505` unique violation, `23503` FK violation, `42501` RLS denial.
 String friendlyError(Object error) {
+  if (isNetworkError(error)) {
+    return "Can't reach StudyTrail. Check your Wi-Fi or mobile data, "
+        'then try again.';
+  }
+
   if (error is AuthException) {
+    // Reached only for 5xx, since transport failures were handled above.
+    // The message here is the raw response body — often an HTML error page.
+    if (error is AuthRetryableFetchException) {
+      return 'The server is having trouble right now. Try again in a moment.';
+    }
+
     final m = error.message.toLowerCase();
     if (m.contains('invalid login')) {
       return 'Wrong email or password.';
@@ -70,9 +112,5 @@ String friendlyError(Object error) {
     return 'The AI service is unavailable right now. Try again shortly.';
   }
 
-  final s = error.toString();
-  if (s.contains('SocketException') || s.contains('Failed host lookup')) {
-    return 'No internet connection.';
-  }
   return 'Something went wrong. Please try again.';
 }

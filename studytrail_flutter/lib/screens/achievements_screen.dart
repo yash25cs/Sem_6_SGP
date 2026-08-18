@@ -44,7 +44,7 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 20, 6),
             child: Row(

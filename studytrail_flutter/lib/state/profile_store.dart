@@ -13,11 +13,17 @@ class ProfileStore extends AsyncStore {
   final GoalRepository _goals;
 
   Profile? _profile;
-  Goal? _goal;
+  List<Goal> _allGoals = const [];
   List<Map<String, dynamic>> _classes = const [];
 
   Profile? get profile => _profile;
-  Goal? get activeGoal => _goal;
+
+  /// The goal the app works against — the three shortcut rows in Settings edit
+  /// this one.
+  Goal? get activeGoal => _allGoals.where((g) => g.isActive).firstOrNull;
+
+  /// Every goal the student has, newest first, for the goal manager.
+  List<Goal> get allGoals => _allGoals;
 
   /// Classes the student can join, for the settings picker.
   List<Map<String, dynamic>> get classes => _classes;
@@ -25,12 +31,14 @@ class ProfileStore extends AsyncStore {
   Future<void> load() => runLoad(() async {
         final results = await Future.wait([
           _profiles.getMyProfile(),
-          _goals.getActiveGoal(),
+          // The whole list, not just the active one: Settings manages all of
+          // them, and the active goal falls out of the same rows.
+          _goals.getGoals(),
           // Needed to resolve `class_id` into a name for the Settings row.
           _profiles.getClasses(),
         ]);
         _profile = results[0] as Profile?;
-        _goal = results[1] as Goal?;
+        _allGoals = results[1] as List<Goal>;
         _classes = results[2] as List<Map<String, dynamic>>;
       });
 
@@ -72,15 +80,56 @@ class ProfileStore extends AsyncStore {
     return match?['name'] as String?;
   }
 
-  Future<bool> updateGoal({String? name, DateTime? examDate, Pace? pace}) =>
+  /// Edits a goal in place. Defaults to the active one, so the three shortcut
+  /// rows in Settings keep working without naming an id.
+  Future<bool> updateGoal({
+    String? goalId,
+    String? name,
+    DateTime? examDate,
+    Pace? pace,
+  }) =>
       runMutation(() async {
-        final goal = _goal;
-        if (goal == null) return;
-        _goal = await _goals.updateGoal(
-          goalId: goal.id,
+        final id = goalId ?? activeGoal?.id;
+        if (id == null) return;
+        final saved = await _goals.updateGoal(
+          goalId: id,
           name: name,
           examDate: examDate,
           pace: pace,
         );
+        _allGoals = [
+          for (final g in _allGoals) g.id == saved.id ? saved : g,
+        ];
+      });
+
+  /// Switches which goal the app works against.
+  ///
+  /// The whole list is re-read rather than patched locally: `setActiveGoal`
+  /// retires the previous goal server-side, so only a fresh read is guaranteed
+  /// to agree with the database about which single row is active.
+  Future<bool> setActiveGoal(String goalId) => runMutation(() async {
+        await _goals.setActiveGoal(goalId);
+        _allGoals = await _goals.getGoals();
+      });
+
+  /// Deletes a goal and everything hanging off it.
+  ///
+  /// If it was the active one, the newest survivor takes over — leaving the
+  /// student with goals but none active would blank out Home with no obvious
+  /// cause.
+  Future<bool> removeGoal(String goalId) => runMutation(() async {
+        final wasActive = activeGoal?.id == goalId;
+        await _goals.deleteGoal(goalId);
+        _allGoals = _allGoals.where((g) => g.id != goalId).toList();
+        if (wasActive && _allGoals.isNotEmpty) {
+          await _goals.setActiveGoal(_allGoals.first.id);
+        }
+        _allGoals = await _goals.getGoals();
+      });
+
+  /// Re-reads the goal list after one was created elsewhere (the New goal flow
+  /// writes through [OnboardingStore]).
+  Future<bool> reloadGoals() => runMutation(() async {
+        _allGoals = await _goals.getGoals();
       });
 }

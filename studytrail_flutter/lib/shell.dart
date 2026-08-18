@@ -15,8 +15,8 @@ import 'screens/pomodoro_screen.dart';
 import 'screens/buddy_room_screen.dart';
 import 'screens/achievements_screen.dart';
 
-/// The main app shell — five bottom-nav tabs in an [IndexedStack], a shared
-/// status strip, and a center quick-actions button for the secondary screens.
+/// The main app shell — five bottom-nav tabs in an [IndexedStack] and a center
+/// quick-actions button for the secondary screens.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -44,6 +44,10 @@ class _HomeShellState extends State<HomeShell> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      // Without this the sheet is capped at 9/16 of the screen, which is 14px
+      // short of the five rows below. The scroll view then covers landscape and
+      // large font scales, where even the full height isn't enough.
+      isScrollControlled: true,
       builder: (sheetCtx) => Container(
         margin: const EdgeInsets.all(12),
         padding: const EdgeInsets.all(20),
@@ -54,76 +58,79 @@ class _HomeShellState extends State<HomeShell> {
         ),
         child: SafeArea(
           top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: p.line2, borderRadius: BorderRadius.circular(99)),
-              ),
-              const SizedBox(height: 18),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Quick actions',
-                    style: TextStyle(
-                        color: p.ink,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800)),
-              ),
-              const SizedBox(height: 16),
-              _QuickAction(
-                icon: Symbols.quiz,
-                title: 'Take a quiz',
-                subtitle: 'Test yourself on today’s topic',
-                color: p.primary,
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _open(QuizScreen(onClose: () => Navigator.pop(context)));
-                },
-              ),
-              _QuickAction(
-                icon: Symbols.timer,
-                title: 'Focus session',
-                subtitle: 'Start a Pomodoro timer',
-                color: p.coral,
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _open(PomodoroScreen(onBack: () => Navigator.pop(context)));
-                },
-              ),
-              _QuickAction(
-                icon: Symbols.groups,
-                title: 'Study buddy room',
-                subtitle: 'Focus with your classmates',
-                color: p.green,
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _open(BuddyRoomScreen(onBack: () => Navigator.pop(context)));
-                },
-              ),
-              _QuickAction(
-                icon: Symbols.leaderboard,
-                title: 'Achievements',
-                subtitle: 'Streaks, badges & leaderboard',
-                color: p.amber,
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _open(AchievementsScreen(onBack: () => Navigator.pop(context)));
-                },
-              ),
-              _QuickAction(
-                icon: Symbols.insights,
-                title: 'Analytics',
-                subtitle: 'Study time, accuracy & consistency',
-                color: p.primary2,
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _open(const _ProgressPage());
-                },
-              ),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: p.line2, borderRadius: BorderRadius.circular(99)),
+                ),
+                const SizedBox(height: 18),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Quick actions',
+                      style: TextStyle(
+                          color: p.ink,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800)),
+                ),
+                const SizedBox(height: 16),
+                _QuickAction(
+                  icon: Symbols.quiz,
+                  title: 'Take a quiz',
+                  subtitle: 'Test yourself on today’s topic',
+                  color: p.primary,
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _open(QuizScreen(onClose: () => Navigator.pop(context)));
+                  },
+                ),
+                _QuickAction(
+                  icon: Symbols.timer,
+                  title: 'Focus session',
+                  subtitle: 'Start a Pomodoro timer',
+                  color: p.coral,
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _open(PomodoroScreen(onBack: () => Navigator.pop(context)));
+                  },
+                ),
+                _QuickAction(
+                  icon: Symbols.groups,
+                  title: 'Study buddy room',
+                  subtitle: 'Focus with your classmates',
+                  color: p.green,
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _open(BuddyRoomScreen(onBack: () => Navigator.pop(context)));
+                  },
+                ),
+                _QuickAction(
+                  icon: Symbols.leaderboard,
+                  title: 'Achievements',
+                  subtitle: 'Streaks, badges & leaderboard',
+                  color: p.amber,
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _open(
+                        AchievementsScreen(onBack: () => Navigator.pop(context)));
+                  },
+                ),
+                _QuickAction(
+                  icon: Symbols.insights,
+                  title: 'Analytics',
+                  subtitle: 'Study time, accuracy & consistency',
+                  color: p.primary2,
+                  onTap: () {
+                    Navigator.pop(sheetCtx);
+                    _open(const _ProgressPage());
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -137,7 +144,7 @@ class _HomeShellState extends State<HomeShell> {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           Expanded(
             child: IndexedStack(index: _tab, children: _tabs),
           ),
@@ -169,7 +176,7 @@ class _ProgressPage extends StatelessWidget {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 20, 6),
             child: Row(

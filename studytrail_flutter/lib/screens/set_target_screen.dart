@@ -9,13 +9,29 @@ import '../widgets/common.dart';
 import '../widgets/data_states.dart';
 import '../widgets/nav.dart';
 
-/// Onboarding step 3 — name the exam, pick a date and pace, list the subjects.
-/// Saving creates the `goals` row (plus a `subjects` row per chip) that the
-/// whole app hangs off; the AI roadmap generation follows in Phase C.
+/// Names an exam, its date, pace and subjects, then creates the `goals` row
+/// (plus a `subjects` row per chip) that the rest of the app hangs off.
+///
+/// Serves two entry points: onboarding step 3, and "New goal" from Home or
+/// Settings — a student keeps one goal per exam. [stepLabel] and [title] are
+/// what distinguish them; the write is identical, and `create_goal` retires the
+/// previously active goal, so the new one is the one the app works against.
 class SetTargetScreen extends StatefulWidget {
-  const SetTargetScreen({super.key, this.onDone, this.onBack});
+  const SetTargetScreen({
+    super.key,
+    this.onDone,
+    this.onBack,
+    this.stepLabel = 'Step 3 of 3',
+    this.title = 'Set your target',
+  });
+
   final VoidCallback? onDone;
   final VoidCallback? onBack;
+
+  /// Top-right progress hint. Meaningless outside onboarding, where callers pass
+  /// something like 'New goal' instead.
+  final String stepLabel;
+  final String title;
 
   @override
   State<SetTargetScreen> createState() => _SetTargetScreenState();
@@ -185,14 +201,14 @@ class _SetTargetScreenState extends State<SetTargetScreen> {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 20, 4),
             child: Row(
               children: [
                 RoundIconButton(Symbols.arrow_back, onTap: widget.onBack),
                 const Spacer(),
-                Text('Step 3 of 3',
+                Text(widget.stepLabel,
                     style: TextStyle(
                         color: p.ink3, fontSize: 13, fontWeight: FontWeight.w700)),
               ],
@@ -204,7 +220,7 @@ class _SetTargetScreenState extends State<SetTargetScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                 children: [
-                  Text('Set your target',
+                  Text(widget.title,
                       style: TextStyle(
                           color: p.ink,
                           fontSize: 26,

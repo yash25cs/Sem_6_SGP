@@ -160,7 +160,7 @@ class _UploadMaterialScreenState extends State<UploadMaterialScreen> {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 20, 4),
             child: Row(

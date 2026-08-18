@@ -90,7 +90,7 @@ class _SignupScreenState extends State<SignupScreen> {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           Expanded(
             child: Form(
               key: _form,

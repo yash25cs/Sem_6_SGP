@@ -30,6 +30,23 @@ class GoalRepository {
     return rows.map(Goal.fromMap).toList();
   }
 
+  /// Makes [goalId] the goal the app works against.
+  ///
+  /// Two statements rather than one: PostgREST can't express
+  /// `is_active = (id = $1)` in a single update, and adding an RPC for it would
+  /// block this on applying another migration. The retire-others call goes
+  /// first, so the worst outcome of a drop between them is *no* active goal —
+  /// which the UI shows as "no goal" and the student can fix with another tap —
+  /// rather than two, which would silently pick whichever is newer.
+  Future<void> setActiveGoal(String goalId) async {
+    await db
+        .from('goals')
+        .update({'is_active': false})
+        .eq('is_active', true)
+        .neq('id', goalId);
+    await db.from('goals').update({'is_active': true}).eq('id', goalId);
+  }
+
   /// Creates a goal and its subjects, and retires the previously active one.
   ///
   /// All three writes happen inside the `create_goal` RPC, so they succeed or

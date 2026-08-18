@@ -75,7 +75,7 @@ class _QuizScreenState extends State<QuizScreen> {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           // header — progress bar only makes sense inside a quiz
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 20, 10),

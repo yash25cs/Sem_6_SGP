@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../theme/subject_style.dart';
 import '../widgets/common.dart';
 import '../widgets/data_states.dart';
+import 'set_target_screen.dart';
 
 /// Home / dashboard tab — greeting, streak, today's plan, and subject progress.
 class HomeScreen extends StatefulWidget {
@@ -33,6 +34,124 @@ class _HomeScreenState extends State<HomeScreen> {
     if (hour < 12) return 'Good morning,';
     if (hour < 17) return 'Good afternoon,';
     return 'Good evening,';
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Opens the goal form as a full route, then refreshes whatever was showing.
+  ///
+  /// The same screen onboarding uses — `create_goal` retires the previous active
+  /// goal, so the new one becomes the goal the app works against.
+  Future<void> _createGoal() async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (routeContext) => SetTargetScreen(
+        stepLabel: 'New goal',
+        title: 'New study goal',
+        onDone: () => Navigator.of(routeContext).pop(),
+        onBack: () => Navigator.of(routeContext).pop(),
+      ),
+    ));
+    if (!mounted) return;
+    await context.read<HomeStore>().load();
+    // Settings reads the same rows from its own store; keep the two in step so
+    // switching tabs doesn't show a stale list.
+    if (mounted) await context.read<ProfileStore>().reloadGoals();
+  }
+
+  /// The goal switcher — every goal the student has, plus a way to add one.
+  Future<void> _switchGoal() async {
+    final store = context.read<HomeStore>();
+    final p = context.p;
+    final activeId = store.goal?.id;
+
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: p.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+                child: Text('Your study goals',
+                    style: TextStyle(
+                        color: p.ink,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800)),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                    'Keep one per exam. StudyTrail plans against the one you '
+                    'pick here.',
+                    style: TextStyle(color: p.ink3, fontSize: 12.5)),
+              ),
+              for (final g in store.allGoals)
+                ListTile(
+                  leading: Icon(Symbols.flag,
+                      color: g.id == activeId ? p.primary : p.ink3),
+                  title: Text(g.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: p.ink,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600)),
+                  subtitle: Text(_examLabel(g),
+                      style: TextStyle(color: p.ink3, fontSize: 12)),
+                  trailing: g.id == activeId
+                      ? Icon(Symbols.check, color: p.primary)
+                      : null,
+                  onTap: () => Navigator.of(sheetContext).pop(g.id),
+                ),
+              ListTile(
+                leading: Icon(Symbols.add, color: p.coral),
+                title: Text('New goal',
+                    style: TextStyle(
+                        color: p.ink,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600)),
+                onTap: () => Navigator.of(sheetContext).pop(_newGoalSentinel),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (picked == null || !mounted) return;
+    if (picked == _newGoalSentinel) {
+      await _createGoal();
+      return;
+    }
+    final ok = await store.switchGoal(picked);
+    if (!ok) _toast(store.error ?? 'Could not switch goal');
+  }
+
+  static const _newGoalSentinel = '__new__';
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  static String _examLabel(Goal goal) {
+    final exam = goal.examDate;
+    if (exam == null) return 'No exam date';
+    final left = goal.daysLeft;
+    final date = '${_months[exam.month - 1]} ${exam.day}';
+    return left == null || left < 0 ? date : '$date · $left days left';
   }
 
   @override
@@ -82,15 +201,30 @@ class _HomeScreenState extends State<HomeScreen> {
               onRetry: () => context.read<HomeStore>().load(),
             ),
 
+          // Goal switcher. Only worth the row once there's a second goal to
+          // switch to — with one, the hero card already names it.
+          if (store.allGoals.length > 1) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SoftChip(goal?.name ?? 'Pick a goal',
+                  icon: Symbols.flag,
+                  tone: ChipTone.primary,
+                  onTap: store.busy ? null : _switchGoal),
+            ),
+            const SizedBox(height: 14),
+          ],
+
           // hero streak / progress card
           if (store.loading && !store.loaded)
             const LoadingBlock(height: 230)
           else if (goal == null)
             EmptyState(
               icon: Symbols.flag,
-              title: 'No exam goal yet',
-              message:
-                  'Set a target exam and StudyTrail will build your roadmap.',
+              title: 'No study goal yet',
+              message: 'Name your exam and StudyTrail will plan around it. '
+                  'You can keep a goal for each exam you\'re preparing for.',
+              actionLabel: 'Create a study goal',
+              onAction: _createGoal,
             )
           else
             _HeroCard(goal: goal, store: store),
@@ -112,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Symbols.checklist,
               title: 'Nothing scheduled',
               message: goal == null
-                  ? 'Set a goal to get a daily plan.'
+                  ? 'Create a goal to get a daily plan.'
                   : 'Your plan for today is clear. Add a task to get going.',
             )
           else

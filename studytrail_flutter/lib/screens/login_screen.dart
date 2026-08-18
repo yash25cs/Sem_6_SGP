@@ -85,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: p.bg,
       body: Column(
         children: [
-          const StatusStrip(),
+          const TopInset(),
           Expanded(
             child: Form(
               key: _form,

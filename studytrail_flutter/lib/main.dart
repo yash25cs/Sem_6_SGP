@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
+import 'data/local_prefs.dart';
 import 'data/repositories/goal_repository.dart';
 import 'state/stores.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
+import 'widgets/timer_banner.dart';
 import 'shell.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/upload_material_screen.dart';
@@ -50,10 +52,16 @@ class StudyTrailApp extends StatelessWidget {
           // (Pomodoro, Quiz, Achievements, Analytics). A scope placed inside
           // `home:` would only cover the shell's own subtree, and those pushed
           // screens would fail to find their store.
+          //
+          // [PomodoroOverlay] sits inside the scope (it reads `PomodoroStore`)
+          // and outside the navigator, which is what lets a running focus timer
+          // stay on screen across every route.
           builder: (context, navigator) => SupabaseConfig.isConfigured
               ? _SignedInScope(
                   userId: context.select<AuthStore, String?>((a) => a.user?.id),
-                  child: navigator ?? const SizedBox.shrink(),
+                  child: PomodoroOverlay(
+                    child: navigator ?? const SizedBox.shrink(),
+                  ),
                 )
               : (navigator ?? const SizedBox.shrink()),
           home: SupabaseConfig.isConfigured
@@ -67,7 +75,9 @@ class StudyTrailApp extends StatelessWidget {
 
 /// Top-level flow. Auth comes first because uploads and goals both need a
 /// `user_id`: welcome → signup/login → upload → set target → app.
-/// A returning user with a goal already saved lands straight in the shell.
+/// The welcome tour is first-install only; after that a signed-out launch opens
+/// straight on sign-in. A returning user with a goal already saved lands in the
+/// shell.
 enum _Stage { welcome, login, signup, upload, target, app }
 
 class RootFlow extends StatefulWidget {
@@ -80,23 +90,42 @@ class RootFlow extends StatefulWidget {
 class _RootFlowState extends State<RootFlow> {
   _Stage _stage = _Stage.welcome;
 
-  /// True while deciding, post-sign-in, whether onboarding is still needed.
-  bool _resolving = false;
+  /// True while deciding where to land — reading the first-run flag when signed
+  /// out, or checking for an existing goal when signed in. Starts true so the
+  /// first frame is the splash instead of a flash of the welcome tour.
+  bool _resolving = true;
   AuthStatus? _lastStatus;
 
   @override
   void initState() {
     super.initState();
     // The store scope is keyed on the user id, so signing in rebuilds this
-    // widget from scratch. Start in the resolving state when a session already
-    // exists, otherwise the first frame would flash the welcome screen.
-    final auth = context.read<AuthStore>();
-    _lastStatus = auth.status;
-    if (auth.status == AuthStatus.signedIn) {
-      _resolving = true;
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _resolveEntryStage());
+    // widget from scratch.
+    _lastStatus = context.read<AuthStore>().status;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  /// Picks the entry stage on cold start.
+  Future<void> _bootstrap() async {
+    if (context.read<AuthStore>().status == AuthStatus.signedIn) {
+      await _resolveEntryStage();
+      return;
     }
+    final seenWelcome = await LocalPrefs.hasSeenWelcome();
+    if (!mounted) return;
+    setState(() {
+      _resolving = false;
+      _stage = seenWelcome ? _Stage.login : _Stage.welcome;
+    });
+  }
+
+  /// Leaving the tour, whether finished or skipped. The flag write isn't
+  /// awaited: it's a local preference, and holding up navigation on disk I/O
+  /// would be a worse trade than the tour reappearing if the write loses a race
+  /// with the process dying.
+  void _finishWelcome() {
+    LocalPrefs.setSeenWelcome();
+    _go(_Stage.signup);
   }
 
   void _go(_Stage s) {
@@ -125,7 +154,7 @@ class _RootFlowState extends State<RootFlow> {
     final auth = context.watch<AuthStore>();
 
     // React to session changes: sign-in decides where to land, sign-out
-    // always returns to welcome.
+    // returns to sign-in rather than the tour, which is install-scoped.
     if (auth.status != _lastStatus) {
       final previous = _lastStatus;
       _lastStatus = auth.status;
@@ -136,22 +165,24 @@ class _RootFlowState extends State<RootFlow> {
       } else if (auth.status == AuthStatus.signedOut &&
           previous == AuthStatus.signedIn) {
         WidgetsBinding.instance
-            .addPostFrameCallback((_) => _go(_Stage.welcome));
+            .addPostFrameCallback((_) => _go(_Stage.login));
       }
     }
 
     if (_resolving) return const _SplashScreen();
 
-    // Guard: never show post-auth stages without a session.
+    // Guard: never show post-auth stages without a session. Sign-in, not the
+    // tour, is the landing here — reaching these stages means the app has
+    // already been used.
     if (!auth.isSignedIn &&
         (_stage == _Stage.upload ||
             _stage == _Stage.target ||
             _stage == _Stage.app)) {
-      _stage = _Stage.welcome;
+      _stage = _Stage.login;
     }
 
     final child = switch (_stage) {
-      _Stage.welcome => WelcomeScreen(onNext: () => _go(_Stage.signup)),
+      _Stage.welcome => WelcomeScreen(onDone: _finishWelcome),
       _Stage.login => LoginScreen(
           onSignIn: () {},
           onSignUp: () => _go(_Stage.signup),
@@ -162,7 +193,12 @@ class _RootFlowState extends State<RootFlow> {
         ),
       _Stage.upload => UploadMaterialScreen(
           onNext: () => _go(_Stage.target),
-          onBack: () => _go(_Stage.welcome),
+          // Upload is the first step *after* auth, so there is no earlier
+          // onboarding stage to return to — the tour is install-scoped and
+          // signup already happened. Back therefore means "leave this
+          // account's onboarding", and the sign-out listener above lands on
+          // the sign-in screen.
+          onBack: () => auth.signOut(),
         ),
       _Stage.target => SetTargetScreen(
           onDone: () => _go(_Stage.app),

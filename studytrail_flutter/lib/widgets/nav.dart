@@ -85,34 +85,26 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-/// The iOS-style status bar strip drawn at the top of each phone mock.
-class StatusStrip extends StatelessWidget {
-  const StatusStrip({super.key, this.color});
-  final Color? color;
+/// Vertical room for the device's own status bar.
+///
+/// This replaced a `StatusStrip` widget that painted a fake `9:41` plus signal,
+/// wifi and battery icons — carried over from the HTML mock, where the phone
+/// chrome had to be drawn. On a real device it collided with the actual system
+/// clock. That strip was also the only thing keeping screen content clear of
+/// the system bar, so the inset it supplied has to stay behind.
+///
+/// [MediaQuery.paddingOf] rather than a fixed height, so notches and punch-hole
+/// cameras get the space they need. Under the focus-session bar the surrounding
+/// [MediaQuery] has its top padding removed, which collapses this to [extra] —
+/// the bar has already paid the inset.
+class TopInset extends StatelessWidget {
+  const TopInset({super.key, this.extra = 8});
+
+  /// Breathing room below the system bar. The old strip's padding worked out to
+  /// roughly this much.
+  final double extra;
 
   @override
-  Widget build(BuildContext context) {
-    final c = color ?? context.p.ink;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 14, 24, 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('9:41',
-              style: TextStyle(
-                  color: c,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()])),
-          Row(children: [
-            Icon(Symbols.signal_cellular_alt, size: 15, color: c),
-            const SizedBox(width: 5),
-            Icon(Symbols.wifi, size: 15, color: c),
-            const SizedBox(width: 5),
-            Icon(Symbols.battery_full, size: 15, color: c),
-          ]),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      SizedBox(height: MediaQuery.paddingOf(context).top + extra);
 }
