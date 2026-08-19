@@ -175,7 +175,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         fontWeight: FontWeight.w800)),
               )),
           if (game.loading && !game.loaded)
-            const LoadingBlock(height: 108)
+            const LoadingBlock(height: 120)
           else if (badges.isEmpty)
             EmptyState(
               icon: Symbols.workspace_premium,
@@ -184,7 +184,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             )
           else
             SizedBox(
-              height: 108,
+              // 14 + 48 icon + 8 + two label lines + 14 of padding = 110.4, so
+              // the old 108 overflowed by ~2px — the yellow stripe reported
+              // across the middle of this screen.
+              height: 120,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: EdgeInsets.zero,
@@ -448,15 +451,20 @@ class _Badge extends StatelessWidget {
                   fill: unlocked ? 1 : 0),
             ),
             const SizedBox(height: 8),
-            Text(badge.name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: unlocked ? p.ink2 : p.ink3,
-                    fontSize: 11,
-                    height: 1.2,
-                    fontWeight: FontWeight.w700)),
+            // Flexible, not a bare Text: the strip has a fixed height, so at a
+            // large system font scale the label has to give way rather than
+            // overflow the card.
+            Flexible(
+              child: Text(badge.name,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: unlocked ? p.ink2 : p.ink3,
+                      fontSize: 11,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700)),
+            ),
           ],
         ),
       ),

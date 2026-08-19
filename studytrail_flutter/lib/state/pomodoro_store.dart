@@ -5,8 +5,12 @@ import '../data/repositories.dart';
 import '../models/models.dart';
 import 'async_store.dart';
 
-/// Which half of the Pomodoro cycle is running.
-enum PomodoroPhase { focus, shortBreak, longBreak }
+/// Which half of the timer is running.
+///
+/// Two phases only: a focus block and the break after it. The long break and the
+/// rounds-per-cycle bookkeeping are gone — the student switches phase by hand
+/// (or lets a finished block hand over), which is what the screen now offers.
+enum PomodoroPhase { focus, shortBreak }
 
 /// Backs the Pomodoro screen and the global focus bar. The timer is local (a
 /// 1-second `Timer.periodic`); only completed focus blocks are persisted, so a
@@ -40,7 +44,6 @@ class PomodoroStore extends AsyncStore {
   int _phaseTotalSeconds = TimerPreset.fallback.focusMinutes * 60;
 
   bool _running = false;
-  int _completedFocusBlocks = 0;
   String? _subjectId;
   bool _onTimerScreen = false;
 
@@ -60,9 +63,7 @@ class PomodoroStore extends AsyncStore {
       [...TimerPreset.builtIns, ..._customPresets];
 
   int get focusMinutes => _preset.focusMinutes;
-  int get shortBreakMinutes => _preset.shortBreakMinutes;
-  int get longBreakMinutes => _preset.longBreakMinutes;
-  int get roundsBeforeLongBreak => _preset.rounds;
+  int get breakMinutes => _preset.breakMinutes;
 
   PomodoroPhase get phase => _phase;
   int get secondsLeft => _secondsLeft;
@@ -71,38 +72,13 @@ class PomodoroStore extends AsyncStore {
   bool get isFocus => _phase == PomodoroPhase.focus;
 
   /// Changing durations is only allowed between blocks. Doing it mid-run was the
-  /// reported bug: the dial and the round counter no longer described the block
-  /// actually being timed.
+  /// reported bug: the dial no longer described the block actually being timed.
   bool get canConfigure => !_running;
 
   /// True once a block has been started and not yet finished or reset — what the
   /// global bar keys off. A freshly loaded dial that nobody touched isn't
   /// "in progress" and shouldn't follow the student around the app.
   bool get inProgress => _running || _secondsLeft < _phaseTotalSeconds;
-
-  /// Focus blocks finished since the app opened.
-  int get completedFocusBlocks => _completedFocusBlocks;
-
-  /// 1-based number of the focus block the current phase belongs to.
-  ///
-  /// A break belongs to the focus block that just ended, not the one coming up —
-  /// otherwise the long break after block 4 reported "Session 1 of 4".
-  int get roundInCycle {
-    final index = isFocus ? _completedFocusBlocks : _completedFocusBlocks - 1;
-    return (index % _preset.rounds) + 1;
-  }
-
-  /// Focus blocks finished within the cycle currently on screen, for the dots.
-  ///
-  /// The modulo alone reads 0 during the long break, when the cycle it closes is
-  /// in fact complete — so that case reports a full row instead.
-  int get completedInCycle {
-    final done = _completedFocusBlocks % _preset.rounds;
-    if (done == 0 && _completedFocusBlocks > 0 && !isFocus) {
-      return _preset.rounds;
-    }
-    return done;
-  }
 
   String? get subjectId => _subjectId;
 
@@ -159,17 +135,18 @@ class PomodoroStore extends AsyncStore {
   String get phaseLabel => labelFor(_phase);
 
   static String labelFor(PomodoroPhase phase) => switch (phase) {
-        PomodoroPhase.focus => 'Focus time',
+        PomodoroPhase.focus => 'Focus',
         PomodoroPhase.shortBreak => 'Short break',
-        PomodoroPhase.longBreak => 'Long break',
       };
 
-  /// What follows the block in progress, for the caption under the dots.
-  String get nextUpLabel {
-    if (!isFocus) return 'Focus next';
-    final useLong = (_completedFocusBlocks + 1) % _preset.rounds == 0;
-    return useLong ? 'Long break next' : 'Short break next';
-  }
+  /// Minutes the given phase runs for under the active preset.
+  int minutesFor(PomodoroPhase phase) => switch (phase) {
+        PomodoroPhase.focus => _preset.focusMinutes,
+        PomodoroPhase.shortBreak => _preset.breakMinutes,
+      };
+
+  /// What a finished block hands over to, for the caption under the dial.
+  String get nextUpLabel => isFocus ? 'Short break next' : 'Focus next';
 
   /// Today's totals, the subject list, and the saved presets. Safe to call on
   /// every screen open — it never touches a running timer.
@@ -273,15 +250,13 @@ class PomodoroStore extends AsyncStore {
   void _adoptPreset(TimerPreset preset) {
     _preset = preset;
     _phase = PomodoroPhase.focus;
-    _completedFocusBlocks = 0;
     _setPhaseDuration();
   }
 
   void start() {
     if (_running) return;
     _running = true;
-    _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    _startTicker();
     notifyListeners();
   }
 
@@ -294,7 +269,7 @@ class PomodoroStore extends AsyncStore {
 
   void toggle() => _running ? pause() : start();
 
-  /// Abandons the current block without logging it.
+  /// Restarts the block on screen from its full length, without logging it.
   void reset() {
     _ticker?.cancel();
     _running = false;
@@ -302,13 +277,38 @@ class PomodoroStore extends AsyncStore {
     notifyListeners();
   }
 
-  /// Ends the block early and moves on. A skipped focus block is not logged —
-  /// the student didn't finish it — and the next block waits for a tap, since
-  /// ending one by hand shouldn't silently start another.
-  void skip() {
+  /// Ends the session: back to an untouched focus block, nothing logged.
+  ///
+  /// Distinct from [reset], which keeps the current phase — stopping during a
+  /// break shouldn't leave the student on a break.
+  void stop() {
     _ticker?.cancel();
     _running = false;
-    _advancePhase(logCompletedFocus: false, autoStart: false);
+    _phase = PomodoroPhase.focus;
+    _setPhaseDuration();
+    notifyListeners();
+  }
+
+  /// Switches between focus and break — what the toggle and the swipe on the
+  /// dial both call.
+  ///
+  /// Returns false, and changes nothing, while the timer runs: swapping the
+  /// phase mid-block would leave the dial describing something other than what
+  /// is being timed. The caller says so rather than silently ignoring the
+  /// gesture. Switching discards the elapsed part of a paused block, which is
+  /// the point — it's a different block now.
+  bool switchTo(PomodoroPhase phase) {
+    if (_phase == phase) return true;
+    if (_running) return false;
+    _phase = phase;
+    _setPhaseDuration();
+    notifyListeners();
+    return true;
+  }
+
+  void _startTicker() {
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
   }
 
   void _tick() {
@@ -320,42 +320,21 @@ class PomodoroStore extends AsyncStore {
     // Hit zero. Record what just finished for the completion popup, then chain
     // straight into the next block — leaving it paused was the reported
     // "changing to next session timer is not working" bug.
+    final finishedFocus = isFocus;
+
     _lastCompletedPhase = _phase;
-    _lastCompletedMinutes = isFocus ? _preset.focusMinutes : null;
-    _advancePhase(logCompletedFocus: true, autoStart: true);
+    _lastCompletedMinutes = finishedFocus ? _preset.focusMinutes : null;
+
+    _phase = finishedFocus ? PomodoroPhase.shortBreak : PomodoroPhase.focus;
+    _setPhaseDuration();
+    _running = true;
+    _startTicker();
+
     _startedPhase = _phase;
     _completionTick++;
     notifyListeners();
-  }
-
-  /// Moves to the next phase, persisting the block if a focus block just ran to
-  /// completion.
-  void _advancePhase({
-    required bool logCompletedFocus,
-    required bool autoStart,
-  }) {
-    final finishedFocus = _phase == PomodoroPhase.focus;
 
     if (finishedFocus) {
-      _completedFocusBlocks++;
-      final useLong = _completedFocusBlocks % _preset.rounds == 0;
-      _phase = useLong ? PomodoroPhase.longBreak : PomodoroPhase.shortBreak;
-    } else {
-      _phase = PomodoroPhase.focus;
-    }
-
-    _setPhaseDuration();
-
-    if (autoStart) {
-      _running = true;
-      _ticker?.cancel();
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
-    } else {
-      _running = false;
-    }
-    notifyListeners();
-
-    if (finishedFocus && logCompletedFocus) {
       // Fire-and-forget: the timer shouldn't stall on a network write.
       unawaited(_logSession(_preset.focusMinutes));
     }
@@ -364,24 +343,26 @@ class PomodoroStore extends AsyncStore {
   /// Loads the current phase's length and freezes it as the denominator for
   /// [progress].
   void _setPhaseDuration() {
-    _phaseTotalSeconds = switch (_phase) {
-      PomodoroPhase.focus => _preset.focusMinutes * 60,
-      PomodoroPhase.shortBreak => _preset.shortBreakMinutes * 60,
-      PomodoroPhase.longBreak => _preset.longBreakMinutes * 60,
-    };
+    _phaseTotalSeconds = minutesFor(_phase) * 60;
     _secondsLeft = _phaseTotalSeconds;
   }
 
   /// One completed focus block. `recordSession` derives the XP from the minutes
   /// server-side, so the store never names an amount.
   Future<void> _logSession(int minutes) async {
-    await runMutation(() async {
+    final ok = await runMutation(() async {
       await _game.recordSession(
         subjectId: _subjectId,
         lengthMin: minutes,
         focusedMin: minutes,
       );
     });
+    // Keep today's tiles honest without a refetch. Only on a successful write,
+    // so the count can't claim a block the server never got.
+    if (!ok) return;
+    _sessionsToday++;
+    _minutesToday += minutes;
+    notifyListeners();
   }
 
   @override

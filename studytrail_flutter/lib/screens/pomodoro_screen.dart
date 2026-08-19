@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
@@ -9,10 +11,17 @@ import '../theme/subject_style.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
 
-/// Pomodoro focus timer with a circular progress ring.
+/// Two-mode focus timer: a **Focus** block and a **Short break**, swapped by
+/// swiping the dial (or tapping the toggle above it), with stop / reset / change
+/// under the play button.
 ///
 /// The countdown itself lives in [PomodoroStore] rather than this widget, so
 /// leaving the screen mid-block doesn't cancel the session.
+///
+/// The body scrolls. Every earlier version laid the dial, the controls and the
+/// footer tiles out with `Spacer`s in a fixed-height `Column`, which is what put
+/// "BOTTOM OVERFLOWED BY 2.0 PIXELS" across the middle of the screen on a short
+/// display; a scroll view can't overflow.
 class PomodoroScreen extends StatefulWidget {
   const PomodoroScreen({super.key, this.onBack});
   final VoidCallback? onBack;
@@ -50,6 +59,12 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     super.dispose();
   }
 
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   /// Lets the student tag the block with a subject, so the logged session
   /// shows up under the right subject in Progress.
   Future<void> _pickSubject() async {
@@ -57,10 +72,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     final p = context.p;
 
     if (store.subjects.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Add subjects to your goal to tag focus sessions.')),
-      );
+      _toast('Add subjects to your goal to tag focus sessions.');
       return;
     }
 
@@ -71,65 +83,80 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
-              child: Text('Focus on',
-                  style: TextStyle(
-                      color: p.ink, fontSize: 17, fontWeight: FontWeight.w800)),
-            ),
-            ListTile(
-              leading: Icon(Symbols.blur_on, color: p.ink3),
-              title: Text('No subject',
-                  style: TextStyle(color: p.ink2, fontSize: 14.5)),
-              trailing: store.subjectId == null
-                  ? Icon(Symbols.check, color: p.primary)
-                  : null,
-              onTap: () {
-                store.selectSubject(null);
-                Navigator.of(sheetContext).pop();
-              },
-            ),
-            for (final s in store.subjects)
-              Builder(builder: (_) {
-                final style = SubjectStyle.of(context, name: s.name);
-                return ListTile(
-                  leading: Icon(style.icon, color: style.color),
-                  title: Text(s.name,
-                      style: TextStyle(
-                          color: p.ink,
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600)),
-                  trailing: store.subjectId == s.id
-                      ? Icon(Symbols.check, color: p.primary)
-                      : null,
-                  onTap: () {
-                    store.selectSubject(s.id);
-                    Navigator.of(sheetContext).pop();
-                  },
-                );
-              }),
-            const SizedBox(height: 12),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+                child: Text('Focus on',
+                    style: TextStyle(
+                        color: p.ink,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800)),
+              ),
+              ListTile(
+                leading: Icon(Symbols.blur_on, color: p.ink3),
+                title: Text('No subject',
+                    style: TextStyle(color: p.ink2, fontSize: 14.5)),
+                trailing: store.subjectId == null
+                    ? Icon(Symbols.check, color: p.primary)
+                    : null,
+                onTap: () {
+                  store.selectSubject(null);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+              for (final s in store.subjects)
+                Builder(builder: (_) {
+                  final style = SubjectStyle.of(context, name: s.name);
+                  return ListTile(
+                    leading: Icon(style.icon, color: style.color),
+                    title: Text(s.name,
+                        style: TextStyle(
+                            color: p.ink,
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600)),
+                    trailing: store.subjectId == s.id
+                        ? Icon(Symbols.check, color: p.primary)
+                        : null,
+                    onTap: () {
+                      store.selectSubject(s.id);
+                      Navigator.of(sheetContext).pop();
+                    },
+                  );
+                }),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  void _toast(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+  /// Focus ↔ break, from the toggle or the swipe.
+  void _switchTo(PomodoroPhase phase) {
+    final store = context.read<PomodoroStore>();
+    if (store.phase == phase) return;
+    if (!store.switchTo(phase)) {
+      _toast('Pause the timer to switch modes.');
+    }
   }
 
-  /// The preset list — the "…" menu in the header.
+  /// A flick across the dial means "the other mode". Focus sits on the left of
+  /// the toggle and the break on the right, so the directions match it.
+  void _onDialSwipe(DragEndDetails details) {
+    final vx = details.velocity.pixelsPerSecond.dx;
+    // Ignore a slow drag: it's usually a stray touch while scrolling.
+    if (vx.abs() < 80) return;
+    _switchTo(vx < 0 ? PomodoroPhase.shortBreak : PomodoroPhase.focus);
+  }
+
+  /// The preset list — the **Change** button.
   ///
   /// Only reachable between blocks: changing the length of a block already
-  /// running left the dial and the round counter describing something other
-  /// than what was being timed.
+  /// running left the dial describing something other than what was being timed.
   Future<void> _configure() async {
     final store = context.read<PomodoroStore>();
     final p = context.p;
@@ -139,7 +166,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
       return;
     }
 
-    final picked = await showModalBottomSheet<TimerPreset>(
+    final choice = await showModalBottomSheet<_PresetChoice>(
       context: context,
       isScrollControlled: true,
       backgroundColor: p.card,
@@ -162,7 +189,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                child: Text('Focus / break minutes and rounds per long break.',
+                child: Text('How long a focus block and its break run for.',
                     style: TextStyle(color: p.ink3, fontSize: 12.5)),
               ),
               for (final preset in store.savedPresets)
@@ -185,13 +212,14 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                   trailing: store.preset.id == preset.id
                       ? Icon(Symbols.check, color: p.primary)
                       : null,
-                  onTap: () => Navigator.of(sheetContext).pop(preset),
+                  onTap: () => Navigator.of(sheetContext)
+                      .pop((action: _PresetAction.apply, preset: preset)),
                   // Long-press to delete keeps the row a single tap target for
                   // the common case; built-ins ship with the app and stay.
                   onLongPress: preset.isBuiltIn
                       ? null
                       : () => Navigator.of(sheetContext)
-                          .pop(_deleteSentinel(preset.id)),
+                          .pop((action: _PresetAction.delete, preset: preset)),
                 ),
               ListTile(
                 leading: Icon(Symbols.add, color: p.coral),
@@ -202,7 +230,8 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                         fontWeight: FontWeight.w600)),
                 subtitle: Text('Your own durations, with an optional note',
                     style: TextStyle(color: p.ink3, fontSize: 12)),
-                onTap: () => Navigator.of(sheetContext).pop(_customSentinel),
+                onTap: () => Navigator.of(sheetContext)
+                    .pop((action: _PresetAction.custom, preset: null)),
               ),
               const SizedBox(height: 12),
             ],
@@ -211,158 +240,45 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
       ),
     );
 
-    if (picked == null || !mounted) return;
+    if (choice == null || !mounted) return;
 
-    if (picked.id == _customSentinel.id) {
-      await _createCustomPreset();
-      return;
+    switch (choice) {
+      case (action: _PresetAction.custom, preset: _):
+        await _createCustomPreset();
+      case (action: _PresetAction.delete, preset: final picked?):
+        await store.deleteCustomPreset(picked.id);
+        _toast('Timer deleted');
+      case (action: _PresetAction.apply, preset: final picked?):
+        final applied = await store.applyPreset(picked);
+        if (!applied) _toast('Pause the timer to change its length.');
+      // A delete or apply with no preset can't be produced by the sheet above.
+      case _:
+        break;
     }
-    if (picked.id.startsWith(_deletePrefix)) {
-      await store.deleteCustomPreset(picked.id.substring(_deletePrefix.length));
-      _toast('Timer deleted');
-      return;
-    }
-    final applied = await store.applyPreset(picked);
-    if (!applied) _toast('Pause the timer to change its length.');
   }
-
-  /// Sentinels let the sheet report the row that was tapped through a single
-  /// `pop` value instead of mutating the store from inside the sheet's context.
-  static const _customSentinel = TimerPreset(
-    id: '__custom__',
-    label: 'Custom',
-    focusMinutes: 25,
-    shortBreakMinutes: 5,
-    longBreakMinutes: 15,
-    rounds: 4,
-  );
-  static const _deletePrefix = '__delete__';
-
-  static TimerPreset _deleteSentinel(String id) => TimerPreset(
-        id: '$_deletePrefix$id',
-        label: 'Delete',
-        focusMinutes: 25,
-        shortBreakMinutes: 5,
-        longBreakMinutes: 15,
-        rounds: 4,
-      );
 
   /// The custom-timer form. The description is genuinely optional — no
   /// validator — so a student who just wants 40/8 isn't made to name it.
   Future<void> _createCustomPreset() async {
     final store = context.read<PomodoroStore>();
     final p = context.p;
-    final current = store.preset;
 
-    final label = TextEditingController();
-    final note = TextEditingController();
-    final focus = TextEditingController(text: '${current.focusMinutes}');
-    final shortBreak =
-        TextEditingController(text: '${current.shortBreakMinutes}');
-    final longBreak =
-        TextEditingController(text: '${current.longBreakMinutes}');
-    final rounds = TextEditingController(text: '${current.rounds}');
-
-    final saved = await showModalBottomSheet<bool>(
+    final preset = await showModalBottomSheet<TimerPreset>(
       context: context,
       isScrollControlled: true,
       backgroundColor: p.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, 20, 20, MediaQuery.of(sheetContext).viewInsets.bottom + 24),
-        child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Custom timer',
-                    style: TextStyle(
-                        color: p.ink,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(
-                    'Minutes between ${TimerPreset.minMinutes} and '
-                    '${TimerPreset.maxMinutes}.',
-                    style: TextStyle(color: p.ink3, fontSize: 12.5)),
-                const SizedBox(height: 14),
-                _TimerField(controller: label, label: 'Name'),
-                _TimerField(
-                    controller: note,
-                    label: 'Description (optional)',
-                    maxLines: 2),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _TimerField(
-                            controller: focus,
-                            label: 'Focus',
-                            numeric: true)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _TimerField(
-                            controller: shortBreak,
-                            label: 'Short break',
-                            numeric: true)),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _TimerField(
-                            controller: longBreak,
-                            label: 'Long break',
-                            numeric: true)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _TimerField(
-                            controller: rounds,
-                            label: 'Rounds',
-                            numeric: true)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                PillButton('Save timer',
-                    onTap: () => Navigator.of(sheetContext).pop(true)),
-              ],
-            ),
-          ),
-        ),
-      ),
+      builder: (_) => _CustomTimerSheet(initial: store.preset),
     );
 
-    if (saved == true) {
-      // A fresh id each time, so saving twice gives two presets rather than
-      // silently overwriting the first. `sanitized()` in the store clamps the
-      // numbers, so a blank or nonsense field can't produce an unrunnable timer.
-      final preset = TimerPreset(
-        id: 'custom-${DateTime.now().millisecondsSinceEpoch}',
-        label: label.text.trim().isEmpty ? 'My timer' : label.text.trim(),
-        description: note.text.trim().isEmpty ? null : note.text.trim(),
-        focusMinutes: int.tryParse(focus.text) ?? current.focusMinutes,
-        shortBreakMinutes:
-            int.tryParse(shortBreak.text) ?? current.shortBreakMinutes,
-        longBreakMinutes:
-            int.tryParse(longBreak.text) ?? current.longBreakMinutes,
-        rounds: int.tryParse(rounds.text) ?? current.rounds,
-      );
-      final applied = await store.saveCustomPreset(preset);
-      _toast(applied
-          ? 'Timer saved'
-          : 'Timer saved — it applies from the next block.');
-    }
+    if (preset == null || !mounted) return;
 
-    label.dispose();
-    note.dispose();
-    focus.dispose();
-    shortBreak.dispose();
-    longBreak.dispose();
-    rounds.dispose();
+    final applied = await store.saveCustomPreset(preset);
+    _toast(applied
+        ? 'Timer saved'
+        : 'Timer saved — it applies from the next block.');
   }
 
   @override
@@ -374,9 +290,13 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     final subjectStyle =
         subject == null ? null : SubjectStyle.of(context, name: subject.name);
 
-    // Breaks get the coral accent so a glance at the ring says which half of
-    // the cycle is running.
+    // Breaks get the coral accent so a glance at the ring says which mode is
+    // running.
     final accent = store.isFocus ? p.primary : p.coral;
+
+    // Big enough to read across a room, but never wider than the screen.
+    final dial =
+        math.min(260.0, MediaQuery.sizeOf(context).width - 96).clamp(180.0, 260.0);
 
     return Scaffold(
       backgroundColor: p.bg,
@@ -394,134 +314,141 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                         color: p.ink,
                         fontSize: 20,
                         fontWeight: FontWeight.w800)),
-                const Spacer(),
-                RoundIconButton(Symbols.more_horiz,
-                    plain: false,
-                    // Greyed rather than hidden, so the menu doesn't vanish
-                    // mid-session — tapping it explains why it won't open.
-                    color: store.canConfigure ? null : p.ink3.withValues(alpha: 0.5),
-                    onTap: _configure),
               ],
             ),
           ),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 6, 24, 28),
               child: Column(
                 children: [
-                  const SizedBox(height: 10),
                   // subject chip
                   SoftChip(subject?.name ?? 'Pick a subject',
                       icon: subjectStyle?.icon ?? Symbols.add,
-                      tone: subject == null
-                          ? ChipTone.neutral
-                          : ChipTone.primary,
+                      tone:
+                          subject == null ? ChipTone.neutral : ChipTone.primary,
                       onTap: _pickSubject),
-                  const SizedBox(height: 8),
-                  const Spacer(),
+                  const SizedBox(height: 18),
 
-                  // timer ring
-                  SizedBox(
-                    width: 260,
-                    height: 260,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 260,
-                          height: 260,
-                          child: TweenAnimationBuilder<double>(
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeOut,
-                            tween: Tween(begin: 0, end: store.progress),
-                            builder: (context, value, _) =>
-                                CircularProgressIndicator(
-                              value: value,
-                              strokeWidth: 14,
-                              strokeCap: StrokeCap.round,
-                              backgroundColor: p.card3,
-                              valueColor: AlwaysStoppedAnimation(accent),
+                  // mode toggle — the same switch the swipe performs
+                  _PhaseToggle(
+                    phase: store.phase,
+                    accent: accent,
+                    focusMinutes: store.focusMinutes,
+                    breakMinutes: store.breakMinutes,
+                    onPick: _switchTo,
+                  ),
+                  const SizedBox(height: 22),
+
+                  // timer ring — swipe across it to change mode
+                  GestureDetector(
+                    onHorizontalDragEnd: _onDialSwipe,
+                    child: SizedBox(
+                      width: dial,
+                      height: dial,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: dial,
+                            height: dial,
+                            child: TweenAnimationBuilder<double>(
+                              duration: const Duration(milliseconds: 400),
+                              curve: Curves.easeOut,
+                              tween: Tween(begin: 0, end: store.progress),
+                              builder: (context, value, _) =>
+                                  CircularProgressIndicator(
+                                value: value,
+                                strokeWidth: 14,
+                                strokeCap: StrokeCap.round,
+                                backgroundColor: p.card3,
+                                valueColor: AlwaysStoppedAnimation(accent),
+                              ),
                             ),
                           ),
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(store.display,
-                                style: TextStyle(
-                                    color: p.ink,
-                                    fontSize: 56,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -1,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures()
-                                    ])),
-                            const SizedBox(height: 4),
-                            Text(store.phaseLabel,
-                                style: TextStyle(
-                                    color: p.ink3,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ],
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(store.display,
+                                  style: TextStyle(
+                                      color: p.ink,
+                                      fontSize: 56,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -1,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ])),
+                              const SizedBox(height: 4),
+                              Text(store.phaseLabel,
+                                  style: TextStyle(
+                                      color: p.ink3,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 16),
 
-                  // session dots — one per focus block in the cycle
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      for (var i = 0; i < store.roundsBeforeLongBreak; i++)
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i < store.completedInCycle
-                                ? p.primary
-                                : p.card3,
-                          ),
-                        ),
+                      Icon(Symbols.swipe, color: p.ink3, size: 16),
+                      const SizedBox(width: 6),
+                      Text('Swipe the dial to switch · ${store.nextUpLabel}',
+                          style: TextStyle(color: p.ink3, fontSize: 12.5)),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
-                      'Session ${store.roundInCycle} of '
-                      '${store.roundsBeforeLongBreak} · ${store.nextUpLabel}',
-                      style: TextStyle(color: p.ink3, fontSize: 12.5)),
-                  if (store.preset.description case final note?) ...[
-                    const SizedBox(height: 4),
-                    Text('${store.preset.label} · $note',
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: p.ink3, fontSize: 11.5)),
-                  ],
-                  const Spacer(),
+                      store.preset.description == null
+                          ? '${store.preset.label} · ${store.preset.summary}'
+                          : '${store.preset.label} · ${store.preset.description}',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: p.ink3, fontSize: 11.5)),
+                  const SizedBox(height: 22),
 
-                  // controls
+                  // primary control
+                  _CircleControl(
+                      store.running ? Symbols.pause : Symbols.play_arrow,
+                      accent,
+                      p.onPrimary,
+                      size: 82,
+                      glow: true,
+                      onTap: store.toggle),
+                  const SizedBox(height: 18),
+
+                  // stop / reset / change
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _CircleControl(Symbols.refresh, p.card, p.ink2,
-                          size: 56, onTap: store.reset),
-                      const SizedBox(width: 22),
-                      _CircleControl(
-                          store.running ? Symbols.pause : Symbols.play_arrow,
-                          accent,
-                          p.onPrimary,
-                          size: 82,
-                          glow: true,
-                          onTap: store.toggle),
-                      const SizedBox(width: 22),
-                      _CircleControl(Symbols.skip_next, p.card, p.ink2,
-                          size: 56, onTap: store.skip),
+                      _ControlButton(
+                        icon: Symbols.stop,
+                        label: 'Stop',
+                        // Nothing to stop on an untouched focus dial.
+                        onTap: store.inProgress ? store.stop : null,
+                      ),
+                      const SizedBox(width: 10),
+                      _ControlButton(
+                          icon: Symbols.refresh,
+                          label: 'Reset',
+                          onTap: store.reset),
+                      const SizedBox(width: 10),
+                      _ControlButton(
+                          icon: Symbols.tune,
+                          label: 'Change',
+                          onTap: _configure,
+                          // Greyed rather than hidden, so the button doesn't
+                          // vanish mid-session — tapping it explains why.
+                          dimmed: !store.canConfigure),
                     ],
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 24),
+
                   Row(
                     children: [
                       Expanded(
@@ -541,6 +468,213 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// What the preset sheet came back with. A record rather than the sentinel
+/// presets this used to pop: "delete" and "custom" aren't timers, and dressing
+/// them up as ones meant every caller had to know the fake ids.
+enum _PresetAction { apply, delete, custom }
+
+typedef _PresetChoice = ({_PresetAction action, TimerPreset? preset});
+
+/// Focus | Short break, with each side's length under its name.
+class _PhaseToggle extends StatelessWidget {
+  const _PhaseToggle({
+    required this.phase,
+    required this.accent,
+    required this.focusMinutes,
+    required this.breakMinutes,
+    required this.onPick,
+  });
+
+  final PomodoroPhase phase;
+  final Color accent;
+  final int focusMinutes, breakMinutes;
+  final ValueChanged<PomodoroPhase> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: p.card,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: p.line),
+      ),
+      child: Row(
+        children: [
+          for (final option in PomodoroPhase.values)
+            Expanded(
+              child: _PhaseTab(
+                label: PomodoroStore.labelFor(option),
+                minutes: option == PomodoroPhase.focus
+                    ? focusMinutes
+                    : breakMinutes,
+                selected: option == phase,
+                accent: accent,
+                onTap: () => onPick(option),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhaseTab extends StatelessWidget {
+  const _PhaseTab({
+    required this.label,
+    required this.minutes,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final String label;
+  final int minutes;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: selected ? p.onPrimary : p.ink2,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800)),
+            Text('$minutes min',
+                style: TextStyle(
+                    color: selected
+                        ? p.onPrimary.withValues(alpha: 0.85)
+                        : p.ink3,
+                    fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The custom-timer form, as a widget so its controllers are disposed by the
+/// element that uses them.
+///
+/// `showModalBottomSheet` returns as soon as the route pops — while the sheet is
+/// still mounted for its exit animation — so controllers created by the caller
+/// and disposed after the `await` were being used after disposal, which took the
+/// screen down with a red error page.
+class _CustomTimerSheet extends StatefulWidget {
+  const _CustomTimerSheet({required this.initial});
+
+  /// Prefills the durations from the timer currently in use.
+  final TimerPreset initial;
+
+  @override
+  State<_CustomTimerSheet> createState() => _CustomTimerSheetState();
+}
+
+class _CustomTimerSheetState extends State<_CustomTimerSheet> {
+  late final TextEditingController _label;
+  late final TextEditingController _note;
+  late final TextEditingController _focus;
+  late final TextEditingController _break;
+
+  @override
+  void initState() {
+    super.initState();
+    _label = TextEditingController();
+    _note = TextEditingController();
+    _focus = TextEditingController(text: '${widget.initial.focusMinutes}');
+    _break = TextEditingController(text: '${widget.initial.breakMinutes}');
+  }
+
+  @override
+  void dispose() {
+    _label.dispose();
+    _note.dispose();
+    _focus.dispose();
+    _break.dispose();
+    super.dispose();
+  }
+
+  /// Builds the preset here, inside the sheet, so nothing reads a controller
+  /// after the route is gone. `sanitized()` in the store clamps the numbers, so
+  /// a blank or nonsense field can't produce an unrunnable timer.
+  void _save() {
+    final label = _label.text.trim();
+    final note = _note.text.trim();
+    Navigator.of(context).pop(TimerPreset(
+      // A fresh id each time, so saving twice gives two presets rather than
+      // silently overwriting the first.
+      id: 'custom-${DateTime.now().millisecondsSinceEpoch}',
+      label: label.isEmpty ? 'My timer' : label,
+      description: note.isEmpty ? null : note,
+      focusMinutes: int.tryParse(_focus.text) ?? widget.initial.focusMinutes,
+      breakMinutes: int.tryParse(_break.text) ?? widget.initial.breakMinutes,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.viewInsetsOf(context).bottom + 24),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Custom timer',
+                  style: TextStyle(
+                      color: p.ink, fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(
+                  'Minutes between ${TimerPreset.minMinutes} and '
+                  '${TimerPreset.maxMinutes}.',
+                  style: TextStyle(color: p.ink3, fontSize: 12.5)),
+              const SizedBox(height: 14),
+              _TimerField(controller: _label, label: 'Name'),
+              _TimerField(
+                  controller: _note,
+                  label: 'Description (optional)',
+                  maxLines: 2),
+              Row(
+                children: [
+                  Expanded(
+                      child: _TimerField(
+                          controller: _focus, label: 'Focus', numeric: true)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: _TimerField(
+                          controller: _break, label: 'Break', numeric: true)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              PillButton('Save timer', onTap: _save),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -626,6 +760,54 @@ class _CircleControl extends StatelessWidget {
   }
 }
 
+/// Icon-over-label pill: the stop / reset / change row under the play button.
+class _ControlButton extends StatelessWidget {
+  const _ControlButton({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.dimmed = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  /// Reads as unavailable but stays tappable, so the tap can explain itself.
+  final bool dimmed;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    final faded = dimmed || onTap == null;
+    final fg = faded ? p.ink3.withValues(alpha: 0.55) : p.ink2;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: 88,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: p.card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: p.line),
+          boxShadow: p.shadowSm,
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: fg, size: 22, fill: 1),
+            const SizedBox(height: 3),
+            Text(label,
+                style: TextStyle(
+                    color: fg, fontSize: 11.5, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MiniInfo extends StatelessWidget {
   const _MiniInfo(this.icon, this.value, this.label, this.color);
   final IconData icon;
@@ -646,17 +828,23 @@ class _MiniInfo extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 24),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(value,
-                  style: TextStyle(
-                      color: p.ink,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800)),
-              Text(label,
-                  style: TextStyle(color: p.ink3, fontSize: 11.5)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: p.ink,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800)),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: p.ink3, fontSize: 11.5)),
+              ],
+            ),
           ),
         ],
       ),

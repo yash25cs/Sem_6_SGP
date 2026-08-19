@@ -1,3 +1,5 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../models/models.dart';
 import '../supabase_client.dart';
 
@@ -55,25 +57,96 @@ class GoalRepository {
   /// new one, and the student was left with no active goal and no way to notice
   /// (REVIEW.md P1). `user_id` comes from the JWT inside the function, so it
   /// isn't sent.
+  ///
+  /// Falls back to the three separate writes when the project doesn't have the
+  /// function yet — see [_createGoalWithoutRpc].
   Future<Goal> createGoal({
     required String name,
     DateTime? examDate,
     Pace pace = Pace.steady,
     List<String> subjectNames = const [],
   }) async {
-    final row = await db.rpc('create_goal', params: {
-      'p_name': name,
-      // date column → date-only, not a full timestamp.
-      'p_exam_date': examDate?.toIso8601String().split('T').first,
-      'p_pace': pace.db,
-      'p_subjects': [
-        for (final n in subjectNames)
-          if (n.trim().isNotEmpty) n.trim(),
-      ],
-    });
-    return Goal.fromMap(
-      row is List ? row.first as Map<String, dynamic> : row as Map<String, dynamic>,
-    );
+    final goalName = name.trim();
+    final subjects = [
+      for (final n in subjectNames)
+        if (n.trim().isNotEmpty) n.trim(),
+    ];
+
+    try {
+      final row = await db.rpc('create_goal', params: {
+        'p_name': goalName,
+        // date column → date-only, not a full timestamp.
+        'p_exam_date': examDate?.toIso8601String().split('T').first,
+        'p_pace': pace.db,
+        'p_subjects': subjects,
+      });
+      return Goal.fromMap(
+        row is List
+            ? row.first as Map<String, dynamic>
+            : row as Map<String, dynamic>,
+      );
+    } on PostgrestException catch (error) {
+      // PGRST202 = "Could not find the function public.create_goal … in the
+      // schema cache", i.e. migration 0009 hasn't been applied. Anything else is
+      // a real failure and stays a failure.
+      if (error.code != 'PGRST202') rethrow;
+      return _createGoalWithoutRpc(
+        name: goalName,
+        examDate: examDate,
+        pace: pace,
+        subjectNames: subjects,
+      );
+    }
+  }
+
+  /// Creates the goal with plain inserts, for a project still running a schema
+  /// from before `create_goal` existed.
+  ///
+  /// Not atomic — that's the whole reason 0009 exists — so the statement order
+  /// is chosen for the least damaging interruption: the goal is inserted first
+  /// and `goals.is_active` defaults to true, so a drop before the retire step
+  /// leaves *two* active goals, and [getActiveGoal] takes the newest, which is
+  /// the one just created. Retiring first would leave no active goal at all.
+  Future<Goal> _createGoalWithoutRpc({
+    required String name,
+    required DateTime? examDate,
+    required Pace pace,
+    required List<String> subjectNames,
+  }) async {
+    final userId = requireUserId;
+
+    final row = await db
+        .from('goals')
+        .insert({
+          'user_id': userId,
+          'name': name,
+          'exam_date': examDate?.toIso8601String().split('T').first,
+          'pace': pace.db,
+        })
+        .select()
+        .single();
+    final goal = Goal.fromMap(row);
+
+    await db
+        .from('goals')
+        .update({'is_active': false})
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .neq('id', goal.id);
+
+    // Case-insensitive dedupe, as the RPC does: there is no unique index on
+    // (goal_id, name) to lean on, so "DBMS" and "dbms" would both land.
+    final seen = <String>{};
+    final subjectRows = [
+      for (final n in subjectNames)
+        if (seen.add(n.toLowerCase()))
+          {'user_id': userId, 'goal_id': goal.id, 'name': n},
+    ];
+    if (subjectRows.isNotEmpty) {
+      await db.from('subjects').insert(subjectRows);
+    }
+
+    return goal;
   }
 
   /// Updates the fields that were passed and returns the saved row, so callers

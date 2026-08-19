@@ -101,8 +101,15 @@ class _SetTargetScreenState extends State<SetTargetScreen> {
     if (picked != null) setState(() => _examDate = picked);
   }
 
+  /// Opens the add-subject sheet and appends what came back.
+  ///
+  /// The sheet's text controller belongs to [_AddSubjectSheet], not to this
+  /// method: `showModalBottomSheet` returns the moment the route pops, while the
+  /// sheet is still mounted for its exit animation. Disposing the controller
+  /// here — right after the `await` — threw "A TextEditingController was used
+  /// after being disposed" from the still-building `TextField`, which is the red
+  /// screen reported when adding a subject.
   Future<void> _addSubject() async {
-    final controller = TextEditingController();
     final p = context.p;
 
     final name = await showModalBottomSheet<String>(
@@ -112,57 +119,8 @@ class _SetTargetScreenState extends State<SetTargetScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, 20, 20, MediaQuery.of(sheetContext).viewInsets.bottom + 24),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Add a subject',
-                  style: TextStyle(
-                      color: p.ink, fontSize: 17, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                style: TextStyle(color: p.ink, fontSize: 14.5),
-                onSubmitted: (v) => Navigator.of(sheetContext).pop(v.trim()),
-                decoration: InputDecoration(
-                  hintText: 'e.g. Data Structures',
-                  hintStyle: TextStyle(color: p.ink3, fontSize: 14),
-                  filled: true,
-                  fillColor: p.card2,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: p.line),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: p.line),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(color: p.primary, width: 1.6),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              PillButton('Add',
-                  icon: Symbols.add,
-                  onTap: () =>
-                      Navigator.of(sheetContext).pop(controller.text.trim())),
-            ],
-          ),
-        ),
-      ),
+      builder: (_) => const _AddSubjectSheet(),
     );
-    controller.dispose();
 
     if (name == null || name.isEmpty || !mounted) return;
     if (_subjects.any((s) => s.toLowerCase() == name.toLowerCase())) return;
@@ -381,6 +339,83 @@ InputDecoration _fieldDecoration(BuildContext context,
     errorBorder: border(p.error, 1.2),
     focusedErrorBorder: border(p.error, 1.6),
   );
+}
+
+/// Body of the add-subject sheet: one field, one button, pops the trimmed name.
+///
+/// A widget rather than an inline `builder` so the [TextEditingController] is
+/// owned by the element that uses it and disposed only once that element is
+/// gone. See [_SetTargetScreenState._addSubject] for why that matters.
+class _AddSubjectSheet extends StatefulWidget {
+  const _AddSubjectSheet();
+
+  @override
+  State<_AddSubjectSheet> createState() => _AddSubjectSheetState();
+}
+
+class _AddSubjectSheetState extends State<_AddSubjectSheet> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.of(context).pop(_controller.text.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.p;
+    OutlineInputBorder border(Color color, double width) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: color, width: width),
+        );
+
+    return Padding(
+      // Lifts the sheet clear of the keyboard.
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.viewInsetsOf(context).bottom + 24),
+      child: SafeArea(
+        top: false,
+        // Scrollable so a large font scale or a landscape keyboard squeezes the
+        // sheet instead of overflowing it.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Add a subject',
+                  style: TextStyle(
+                      color: p.ink, fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.done,
+                style: TextStyle(color: p.ink, fontSize: 14.5),
+                onSubmitted: (_) => _submit(),
+                decoration: InputDecoration(
+                  hintText: 'e.g. Data Structures',
+                  hintStyle: TextStyle(color: p.ink3, fontSize: 14),
+                  filled: true,
+                  fillColor: p.card2,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: border(p.line, 1),
+                  enabledBorder: border(p.line, 1),
+                  focusedBorder: border(p.primary, 1.6),
+                ),
+              ),
+              const SizedBox(height: 18),
+              PillButton('Add', icon: Symbols.add, onTap: _submit),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Label extends StatelessWidget {

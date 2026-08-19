@@ -1,4 +1,4 @@
-/// A named set of Pomodoro durations, optionally with a note from the student.
+/// A named focus/break pair, optionally with a note from the student.
 ///
 /// Unlike every other model here this one never goes to Postgres — presets are
 /// a preference about how *this* student likes to work on *this* phone, so they
@@ -9,9 +9,7 @@ class TimerPreset {
     required this.id,
     required this.label,
     required this.focusMinutes,
-    required this.shortBreakMinutes,
-    required this.longBreakMinutes,
-    required this.rounds,
+    required this.breakMinutes,
     this.description,
     this.isBuiltIn = false,
   });
@@ -26,22 +24,19 @@ class TimerPreset {
   final String? description;
 
   final int focusMinutes;
-  final int shortBreakMinutes;
-  final int longBreakMinutes;
 
-  /// Focus blocks before the long break replaces the short one.
-  final int rounds;
+  /// The single break length. There is no long break: the timer alternates
+  /// focus and break, and the student switches between the two by hand.
+  final int breakMinutes;
 
   /// Shipped with the app, so it can't be deleted.
   final bool isBuiltIn;
 
   /// Shortest sensible block is a minute — anything less makes the dial and the
-  /// logged session meaningless. The ceilings keep a typo from producing a
+  /// logged session meaningless. The ceiling keeps a typo from producing a
   /// timer that never ends.
   static const int minMinutes = 1;
   static const int maxMinutes = 180;
-  static const int minRounds = 1;
-  static const int maxRounds = 12;
 
   static const List<TimerPreset> builtIns = [
     TimerPreset(
@@ -49,9 +44,7 @@ class TimerPreset {
       label: 'Classic',
       description: 'The original Pomodoro rhythm.',
       focusMinutes: 25,
-      shortBreakMinutes: 5,
-      longBreakMinutes: 15,
-      rounds: 4,
+      breakMinutes: 5,
       isBuiltIn: true,
     ),
     TimerPreset(
@@ -59,9 +52,7 @@ class TimerPreset {
       label: 'Deep work',
       description: 'Long stretches for problem sets and past papers.',
       focusMinutes: 50,
-      shortBreakMinutes: 10,
-      longBreakMinutes: 20,
-      rounds: 3,
+      breakMinutes: 10,
       isBuiltIn: true,
     ),
     TimerPreset(
@@ -69,23 +60,19 @@ class TimerPreset {
       label: 'Short burst',
       description: 'For days when starting is the hard part.',
       focusMinutes: 15,
-      shortBreakMinutes: 3,
-      longBreakMinutes: 12,
-      rounds: 4,
+      breakMinutes: 3,
       isBuiltIn: true,
     ),
   ];
 
   static TimerPreset get fallback => builtIns.first;
 
-  /// "25 / 5 · 4 rounds" — the subtitle in the preset list.
-  String get summary =>
-      '$focusMinutes / $shortBreakMinutes · $rounds round'
-      '${rounds == 1 ? '' : 's'}';
+  /// "25 min focus · 5 min break" — the subtitle in the preset list.
+  String get summary => '$focusMinutes min focus · $breakMinutes min break';
 
-  /// Clamps every field into range and drops a blank description, so neither a
-  /// bad form entry nor a hand-edited preferences file can produce a preset the
-  /// timer can't run.
+  /// Clamps both durations into range and drops a blank description, so neither
+  /// a bad form entry nor a hand-edited preferences file can produce a preset
+  /// the timer can't run.
   TimerPreset sanitized() {
     final note = description?.trim();
     return TimerPreset(
@@ -93,9 +80,7 @@ class TimerPreset {
       label: label.trim().isEmpty ? 'Custom' : label.trim(),
       description: (note == null || note.isEmpty) ? null : note,
       focusMinutes: focusMinutes.clamp(minMinutes, maxMinutes),
-      shortBreakMinutes: shortBreakMinutes.clamp(minMinutes, maxMinutes),
-      longBreakMinutes: longBreakMinutes.clamp(minMinutes, maxMinutes),
-      rounds: rounds.clamp(minRounds, maxRounds),
+      breakMinutes: breakMinutes.clamp(minMinutes, maxMinutes),
       isBuiltIn: isBuiltIn,
     );
   }
@@ -105,9 +90,7 @@ class TimerPreset {
         'label': label,
         if (description != null) 'description': description,
         'focus': focusMinutes,
-        'short': shortBreakMinutes,
-        'long': longBreakMinutes,
-        'rounds': rounds,
+        'break': breakMinutes,
       };
 
   /// Returns null when the entry can't be read — a preferences file written by
@@ -124,9 +107,11 @@ class TimerPreset {
       label: label,
       description: note is String ? note : null,
       focusMinutes: (raw['focus'] as num?)?.toInt() ?? 25,
-      shortBreakMinutes: (raw['short'] as num?)?.toInt() ?? 5,
-      longBreakMinutes: (raw['long'] as num?)?.toInt() ?? 15,
-      rounds: (raw['rounds'] as num?)?.toInt() ?? 4,
+      // `short` is what the build with a long break wrote; still read so those
+      // saved presets survive the update. Its `long` and `rounds` keys are
+      // simply ignored.
+      breakMinutes:
+          ((raw['break'] ?? raw['short']) as num?)?.toInt() ?? 5,
     ).sanitized();
   }
 }
