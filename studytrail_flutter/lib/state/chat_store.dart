@@ -1,10 +1,12 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../data/repositories.dart';
 import '../models/models.dart';
 import 'async_store.dart';
 
-/// Backs the Chat screen. Until the `chat` Edge Function lands (Phase C) the
-/// user's turn is persisted but no answer is generated — the screen shows that
-/// state rather than faking a reply.
+/// Backs the Chat screen. The answer comes from the `chat` Edge Function, which
+/// writes both turns server-side; this store shows optimistic bubbles and then
+/// reloads the thread from the table.
 class ChatStore extends AsyncStore {
   ChatStore({ChatRepository? chat, GoalRepository? goals})
       : _chat = chat ?? const ChatRepository(),
@@ -51,19 +53,35 @@ class ChatStore extends AsyncStore {
     notifyListeners();
 
     try {
-      await _chat.addMessage(
-        threadId: thread.id,
-        role: ChatRole.user,
-        text: body,
-      );
-      // The AI reply is written by the `chat` Edge Function; wired in Phase C.
-      // Reloading drops the optimistic bubbles and picks up whatever exists.
+      try {
+        await _chat.askAi(threadId: thread.id, question: body);
+      } on FunctionException catch (e) {
+        // Not deployed on this project. Fall back to what this store did before
+        // the function existed: keep the question so it isn't lost, and let the
+        // screen show a thread with no reply rather than a red screen.
+        if (e.status != 404) rethrow;
+        await _chat.addMessage(
+          threadId: thread.id,
+          role: ChatRole.user,
+          text: body,
+        );
+      }
+      // Reloading drops the optimistic bubbles and picks up both stored turns
+      // along with their citation chips.
       _messages = await _chat.getMessages(thread.id);
     } catch (e) {
       _messages = _messages
           .where((m) => !m.isPending && !m.id.startsWith('_local_'))
           .toList();
       setError(e);
+      // The function saves the question before it calls the model, so a failure
+      // partway through can leave it stored. Reload so the student sees their own
+      // message where they left it rather than watching it disappear.
+      try {
+        _messages = await _chat.getMessages(thread.id);
+      } catch (_) {
+        // Offline, most likely — the error already set above is the real one.
+      }
     } finally {
       _sending = false;
       notifyListeners();

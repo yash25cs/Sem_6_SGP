@@ -1,6 +1,6 @@
 # StudyTrail — Supabase backend
 
-Postgres schema, RLS, RPCs, Storage, and (later) Edge Functions for the
+Postgres schema, RLS, RPCs, Storage, and the Gemini Edge Functions for the
 StudyTrail Flutter app. Nothing here touches `studytrail_ui.html` or the
 existing Flutter UI.
 
@@ -9,7 +9,7 @@ supabase/
   config.toml          # local/dev project config
   migrations/          # ordered SQL — apply 0001 → 0009
   all_migrations.sql   # GENERATED: all nine concatenated, for the SQL editor
-  functions/           # Edge Functions (Phase C)
+  functions/           # Edge Functions: embed-material, chat, _shared/
 ```
 
 ## What's in the migrations
@@ -100,14 +100,73 @@ Both should show exactly one row, auto-created by the `handle_new_user`
 trigger. Because the SQL editor runs as `postgres` it bypasses RLS; to verify
 the policies themselves, query PostgREST with a real user JWT.
 
-## Phase C — Edge Functions
+## Edge Functions
 
-Not yet written. When they land, the Gemini key is set as a function secret,
-never in the app:
+Two are written, both under `functions/`:
+
+| Function | Body | Does |
+|---|---|---|
+| `embed-material` | `{materialId, force?}` | Downloads the file from the private `materials` bucket, splits it into sections (PDF via Gemini's document vision, `.txt`/`.md` locally), embeds each at 768 dimensions, replaces that material's `material_chunks` rows, then flips `status` to `embedded`. |
+| `chat` | `{threadId, question, subjectId?}` | Embeds the question, retrieves through `match_material_chunks`, answers from those excerpts only, and writes **both** turns to `chat_messages` plus `chat_citations`. |
+
+Neither uses the `service_role` key. Each builds a `supabase-js` client that
+forwards the caller's `Authorization` header, so RLS decides what they can see
+and `match_material_chunks` — security-invoker, `where c.user_id = auth.uid()` —
+resolves to the right student without a `user_id` in the body. The later
+`generate-quiz` / `generate-roadmap` will need the service key, because
+`0008_rewards.sql` revokes `insert` on `quizzes`, `quiz_questions`, `milestones`
+and `milestone_tasks` from `authenticated`.
+
+Chunks are inserted **before** `status` becomes `embedded`, not after:
+`app_private.material_status_guard()` (`0009_atomicity.sql`) raises `23514` on an
+`embedded` material with no chunks, and it fires for every role including
+`service_role`.
+
+### Secrets
+
+The Gemini key is a function secret, never a `--dart-define` — it must not ship
+in the APK. Get one from [aistudio.google.com](https://aistudio.google.com) →
+**Get API key**.
 
 ```bash
-npx --yes supabase@latest secrets set GEMINI_API_KEY=your_key_here
+npx --yes supabase@latest secrets set GEMINI_API_KEY=your_key_here --project-ref tmakrbqggezkxtygythc
 ```
+
+| Name | Default | Why you'd set it |
+|---|---|---|
+| `GEMINI_API_KEY` | — | Required. Without it both functions answer *"The AI features are not set up for this project yet."* |
+| `GEMINI_TEXT_MODEL` | `gemini-3.7-flash` | A cheaper or newer text model. |
+| `GEMINI_EMBED_MODEL` | `gemini-embedding-2` | Falling back to `gemini-embedding-001` — pair it with `GEMINI_EMBED_TASK_TYPE`, which `gemini-embedding-2` rejects. |
+| `GEMINI_EMBED_DIM` | `768` | Only if `material_chunks.embedding` changes, which means re-embedding everything. |
+| `GEMINI_API_BASE` | `https://generativelanguage.googleapis.com/v1beta` | The docs disagree with themselves about `/v1beta` vs `/v1beta2` for Interactions; this is the escape hatch. |
+
+Custom names may not start with `SUPABASE_` — that prefix is reserved for the
+`SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` the runtime
+injects, and the first two are what `requireUser` reads.
+
+### Deploying
+
+`--use-api` bundles server-side, which is what makes this work with no Docker and
+no Deno installed. The folder isn't linked (`supabase/.temp/` has no
+`project-ref`), so every command names the project:
+
+```bash
+npx --yes supabase@latest login
+```
+
+```bash
+npx --yes supabase@latest functions deploy embed-material chat --use-api --project-ref tmakrbqggezkxtygythc
+```
+
+The deploy is also the first real syntax check — nothing here can be type-checked
+locally. Logs are in the dashboard under **Edge Functions → chat /
+embed-material → Logs**; every handled failure logs the upstream reason there and
+returns `{"error": "…"}`, which the app shows verbatim in a snackbar.
+
+### Still to write
+
+`generate-flashcards`, `generate-quiz`, `generate-roadmap`. Until they exist the
+Roadmap tab and the quiz list stay empty — nothing else inserts those rows.
 
 ## Regenerating `all_migrations.sql`
 

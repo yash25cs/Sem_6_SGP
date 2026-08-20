@@ -60,6 +60,9 @@ feat(ai): add cited syllabus chat function
 
 **Commit:** `feat(materials): process uploads into searchable chunks`
 
+**Status:** written 2026-08-20 — `supabase/functions/embed-material/`. Needs
+`GEMINI_API_KEY` and a `functions deploy` before it runs.
+
 - Create the authenticated `embed-material` Edge Function.
 - Extract text, chunk it, generate embeddings, and update material status.
 - Keep the Gemini key in Supabase Function secrets only.
@@ -67,6 +70,9 @@ feat(ai): add cited syllabus chat function
 ## Day 5 — Real AI study chat
 
 **Commit:** `feat(chat): answer syllabus questions with citations`
+
+**Status:** written 2026-08-20 — `supabase/functions/chat/`. Deploys together
+with `embed-material`.
 
 - Create the `chat` Edge Function.
 - Retrieve only the caller’s chunks through RLS-scoped search.

@@ -3,9 +3,9 @@ import '../supabase_client.dart';
 
 /// Chat threads and messages.
 ///
-/// This repository only reads and writes rows. The actual answer comes from
-/// the `chat` Edge Function (Phase C) — it writes both the user message and
-/// the AI reply server-side, then this reloads the thread.
+/// Reads and writes rows, plus one call into the `chat` Edge Function. That
+/// function writes *both* turns — the question and the answer — so on the happy
+/// path [askAi] is the only write, and the caller reloads the thread afterwards.
 class ChatRepository {
   const ChatRepository();
 
@@ -72,6 +72,29 @@ class ChatRepository {
         .select('*, chat_citations(*)')
         .single();
     return ChatMessage.fromMap(row);
+  }
+
+  /// Asks the `chat` Edge Function for a grounded answer.
+  ///
+  /// Returns the answer text. Both rows are already in `chat_messages` by the
+  /// time this resolves, so the caller reloads rather than trusting this string
+  /// — that's also what picks up the citation chips.
+  ///
+  /// [subjectId] narrows retrieval to one subject's materials; null searches
+  /// everything the student has uploaded.
+  Future<String> askAi({
+    required String threadId,
+    required String question,
+    String? subjectId,
+  }) async {
+    final res = await db.functions.invoke('chat', body: {
+      'threadId': threadId,
+      'question': question,
+      'subjectId': ?subjectId,
+    });
+    final data = res.data;
+    if (data is Map && data['answer'] is String) return data['answer'] as String;
+    return '';
   }
 
   Future<void> deleteThread(String threadId) =>

@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../config/supabase_config.dart';
 import '../../models/models.dart';
 import '../supabase_client.dart';
@@ -89,14 +91,64 @@ class MaterialRepository {
     return StudyMaterial.fromMap(row);
   }
 
-  /// Emits whenever this material's row changes — lets the upload screen show
-  /// uploaded → processing → embedded as the Edge Function works.
+  /// Emits whenever this material's row changes.
+  ///
+  /// Unused: no migration adds `materials` to the `supabase_realtime`
+  /// publication, so this stream would never emit a change. [requestIngest]
+  /// awaits the function and the caller refetches instead. Kept because turning
+  /// it on is one line of SQL away.
   Stream<StudyMaterial> watchMaterial(String id) {
     return db
         .from('materials')
         .stream(primaryKey: ['id'])
         .eq('id', id)
         .map((rows) => StudyMaterial.fromMap(rows.first));
+  }
+
+  /// Asks the `embed-material` Edge Function to read this material and store its
+  /// embedded chunks. Returns how many chunks it wrote.
+  ///
+  /// Awaited rather than fired and forgotten: a syllabus PDF takes a few seconds
+  /// and the caller needs the final status to show. The function itself sets
+  /// `processing` → `embedded`/`failed`, so this only has to handle the cases it
+  /// couldn't reach.
+  Future<int> requestIngest(String materialId) async {
+    try {
+      final res = await db.functions.invoke(
+        'embed-material',
+        body: {'materialId': materialId},
+      );
+      final data = res.data;
+      if (data is Map && data['chunks'] is int) return data['chunks'] as int;
+      return 0;
+    } on FunctionException catch (e) {
+      // A 404 is almost always "not deployed yet" — nothing ran, so nothing
+      // marked the row. Any other status means the function answered: a 4xx is
+      // it refusing the material and deliberately leaving `status` alone, a 5xx
+      // means it already marked the row `failed` on its way out.
+      if (e.status == 404) await _markFailedQuietly(materialId);
+      rethrow;
+    } catch (_) {
+      // Never reached the function at all — no network, no session. A function
+      // that never ran can't mark its own failure.
+      await _markFailedQuietly(materialId);
+      rethrow;
+    }
+  }
+
+  /// Resets a failed material and asks for ingestion again — the Retry action.
+  Future<int> reingest(String materialId) async {
+    await retryIngest(materialId);
+    return requestIngest(materialId);
+  }
+
+  /// [markIngestFailed] without letting its own failure replace the real error.
+  Future<void> _markFailedQuietly(String materialId) async {
+    try {
+      await markIngestFailed(materialId);
+    } catch (_) {
+      // The invocation error is the one worth surfacing.
+    }
   }
 
   /// Records that ingestion didn't happen, so the row reads as retryable rather

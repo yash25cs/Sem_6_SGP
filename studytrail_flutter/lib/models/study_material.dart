@@ -36,6 +36,21 @@ class StudyMaterial {
 
   bool get isReady => status == IngestStatus.embedded;
 
+  /// The same material with a different ingest status.
+  ///
+  /// For showing "Processing…" locally while `embed-material` works — the row is
+  /// read back from Postgres afterwards, which is what settles the real status.
+  StudyMaterial withStatus(IngestStatus status) => StudyMaterial(
+        id: id,
+        sourceType: sourceType,
+        goalId: goalId,
+        title: title,
+        storagePath: storagePath,
+        externalUrl: externalUrl,
+        status: status,
+        createdAt: createdAt,
+      );
+
   factory StudyMaterial.fromMap(Map<String, dynamic> m) => StudyMaterial(
         id: m['id'] as String,
         goalId: m['goal_id'] as String?,

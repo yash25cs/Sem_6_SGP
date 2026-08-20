@@ -26,6 +26,9 @@ stitch_ref/
 *.keystore
 key.properties
 
+# Supabase CLI scratch state (version check, linked-project ref)
+supabase/.temp/
+
 # Local crash and operating-system files
 hs_err_pid*.log
 *.log

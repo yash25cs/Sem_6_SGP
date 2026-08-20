@@ -12,8 +12,9 @@ import '../widgets/data_states.dart';
 import '../widgets/nav.dart';
 
 /// Onboarding step 2 — pick a source type, then upload real files (or paste a
-/// link). Everything lands in the private `materials` bucket + `materials`
-/// table; the AI ingest that follows is wired in Phase C.
+/// link). Files land in the private `materials` bucket + `materials` table, and
+/// the `embed-material` function reads each one straight away, so the row's chip
+/// moves Uploaded → Processing → Ready without leaving this screen.
 class UploadMaterialScreen extends StatefulWidget {
   const UploadMaterialScreen({super.key, this.onNext, this.onBack});
   final VoidCallback? onNext;
@@ -79,8 +80,18 @@ class _UploadMaterialScreenState extends State<UploadMaterialScreen> {
     }
   }
 
-  /// Video links have nothing to upload — they're recorded as a row so the
-  /// ingest function can fetch the transcript later.
+  /// Retries a row that came back `failed` — a Gemini hiccup, a missing key, or
+  /// a file it couldn't read.
+  Future<void> _retry(StudyMaterial material) async {
+    final store = context.read<OnboardingStore>();
+    final ok = await store.reingest(material);
+    if (!mounted) return;
+    _toast(ok ? 'Reading it again…' : store.error ?? 'Could not read that file');
+  }
+
+  /// Video links have nothing to upload — they're recorded as a row so a later
+  /// phase can fetch the transcript. Nothing reads them yet, which the sheet and
+  /// the drop zone both say out loud.
   Future<void> _addLink() async {
     final controller = TextEditingController();
     final p = context.p;
@@ -213,12 +224,33 @@ class _UploadMaterialScreenState extends State<UploadMaterialScreen> {
                   onTap: store.busy ? null : (isLink ? _addLink : _browse),
                 ),
 
+                if (isLink) ...[
+                  const SizedBox(height: 10),
+                  // Said here rather than discovered later: the row will sit on
+                  // "Uploaded" forever, and that shouldn't look like a bug.
+                  Row(
+                    children: [
+                      Icon(Symbols.info, color: p.ink3, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                            "Links are saved to your library, but the AI can't "
+                            'read them yet — upload a PDF or a text file for '
+                            'answers from your own material.',
+                            style: TextStyle(
+                                color: p.ink3, fontSize: 12, height: 1.45)),
+                      ),
+                    ],
+                  ),
+                ],
+
                 if (store.uploaded.isNotEmpty) ...[
                   const SizedBox(height: 22),
                   CardHeader('Added (${store.uploaded.length})'),
                   for (final material in store.uploaded)
                     _MaterialRow(
                       material: material,
+                      onRetry: store.busy ? null : () => _retry(material),
                       onRemove: store.busy
                           ? null
                           : () => context
@@ -351,8 +383,8 @@ class _DropZone extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
                 isLink
-                    ? 'YouTube, lecture recordings, or an article URL'
-                    : 'PDF, DOCX or PPTX · up to 50 MB',
+                    ? 'Saved for later — links are not read yet'
+                    : 'PDF, TXT or MD · up to 25 MB',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: p.ink3, fontSize: 12)),
             const SizedBox(height: 14),
@@ -367,11 +399,13 @@ class _DropZone extends StatelessWidget {
   }
 }
 
-/// One uploaded source, with its ingest status and a remove action.
+/// One uploaded source, with its ingest status, a retry for the failed ones, and
+/// a remove action.
 class _MaterialRow extends StatelessWidget {
-  const _MaterialRow({required this.material, this.onRemove});
+  const _MaterialRow({required this.material, this.onRetry, this.onRemove});
 
   final StudyMaterial material;
+  final VoidCallback? onRetry;
   final VoidCallback? onRemove;
 
   @override
@@ -414,6 +448,10 @@ class _MaterialRow extends StatelessWidget {
                 ],
               ),
             ),
+            // Retry only on `failed`: nothing else is stuck. A link never leaves
+            // `uploaded`, so it correctly gets no retry either.
+            if (material.status == IngestStatus.failed)
+              RoundIconButton(Symbols.refresh, onTap: onRetry),
             RoundIconButton(Symbols.close, onTap: onRemove),
           ],
         ),

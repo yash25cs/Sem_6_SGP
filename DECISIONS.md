@@ -94,6 +94,47 @@ non-trivial choice.
   live project unnecessarily vulnerable and creates cleanup work.
 - **Trade-off:** Running the helper requires two explicit command arguments.
 
+### D-011 — Ingestion and chat functions act as the caller, not as `service_role`
+
+- **Decision:** `embed-material` and `chat` build their Supabase client from the
+  request's own `Authorization` header, so RLS decides what they can read and
+  write and `match_material_chunks` resolves `auth.uid()` to the real caller. No
+  service-role key is used or stored for either function.
+- **Why:** Every table they touch — `material_chunks`, `chat_messages`,
+  `chat_citations` — is still owner-insertable, so the elevated key would buy
+  nothing and would make a `user_id` in the request body meaningful, which is
+  exactly what `OWNERSHIP.md` forbids.
+- **Trade-off:** `generate-quiz` and `generate-roadmap` cannot follow this
+  pattern: `0008_rewards.sql` revokes `insert` on their tables from
+  `authenticated`, so they will need the service-role key and must verify the
+  JWT themselves before writing.
+
+### D-012 — Read PDFs with Gemini's document vision, not a Deno PDF parser
+
+- **Decision:** `embed-material` sends the PDF to Gemini as a `document` input
+  and asks for ordered, unit-labelled sections. `.txt` and `.md` are split
+  locally with no model call.
+- **Why:** Neither Deno nor Docker is installed on the development machine, so a
+  bundled parser could not be run even once before deploying, and pdf.js under
+  the Edge Runtime is a common source of crashes. Gemini also keeps headings and
+  table text readable, which a raw text extractor usually loses.
+- **Trade-off:** Ingestion costs one generation call per document and is capped
+  at roughly 14 MB per PDF, since the file has to be inlined as base64. Large
+  files will need the Gemini Files API later.
+
+### D-013 — Request shape for Gemini's Interactions API degrades instead of failing
+
+- **Decision:** `_shared/gemini.ts` reads the API base URL and model ids from
+  function secrets, and on a `400` that names `response_format`,
+  `system_instruction` or `generation_config` it retries with a simpler request
+  — down to asking for JSON in words and parsing it defensively.
+- **Why:** Google's own documentation disagrees with itself about the
+  Interactions endpoint (`/v1beta` vs `/v1beta2`) and about whether
+  `response_format` is an object or an array. None of it can be verified locally
+  without Deno, so the first real test is a deploy against live infrastructure.
+- **Trade-off:** More code than a single request shape, and a wrong guess costs
+  an extra round trip before it corrects itself.
+
 ## Update rule
 
 For each meaningful decision, add the next `D-###` item with the decision,

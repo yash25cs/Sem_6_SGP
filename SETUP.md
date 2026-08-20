@@ -86,5 +86,22 @@ That file is gitignored — keep it off version control.
   and `in.charusat.studytrail://login-callback` added under
   **Authentication → URL Configuration**. The Android intent-filter is already
   in place.
-- **Gemini API key** isn't needed until Phase C (AI features). It will be set
-  as a Supabase function secret, never shipped in the app.
+- **Gemini API key** is what turns on material ingestion and AI chat. Get one
+  from [aistudio.google.com](https://aistudio.google.com) → **Get API key**, then
+  set it as a Supabase *function* secret — never a `--dart-define`, so it can't
+  ship in the APK:
+
+  ```bash
+  npx --yes supabase@latest secrets set GEMINI_API_KEY=your_key_here --project-ref tmakrbqggezkxtygythc
+  ```
+
+  Then deploy the two functions that read it (`--use-api` bundles server-side, so
+  no Docker or Deno is needed locally):
+
+  ```bash
+  npx --yes supabase@latest functions deploy embed-material chat --use-api --project-ref tmakrbqggezkxtygythc
+  ```
+
+  Until both are done, uploads land on **Failed** with a readable reason and Chat
+  keeps the question without answering. `supabase/README.md` lists the optional
+  model/base-URL overrides.
