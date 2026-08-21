@@ -175,8 +175,11 @@ class GoalRepository {
       db.from('goals').delete().eq('id', goalId);
 
   Future<List<Subject>> getSubjects(String goalId) async {
-    final rows =
-        await db.from('subjects').select().eq('goal_id', goalId).order('name');
+    final rows = await db
+        .from('subjects')
+        .select()
+        .eq('goal_id', goalId)
+        .order('name', ascending: true);
     return rows.map(Subject.fromMap).toList();
   }
 

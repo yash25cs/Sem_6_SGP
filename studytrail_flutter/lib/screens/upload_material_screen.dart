@@ -9,6 +9,7 @@ import '../state/stores.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/data_states.dart';
+import '../widgets/material_tile.dart';
 import '../widgets/nav.dart';
 
 /// Onboarding step 2 — pick a source type, then upload real files (or paste a
@@ -221,7 +222,12 @@ class _UploadMaterialScreenState extends State<UploadMaterialScreen> {
                 _DropZone(
                   isLink: isLink,
                   busy: store.busy,
-                  onTap: store.busy ? null : (isLink ? _addLink : _browse),
+                  // A link has nothing to store, so the file cap doesn't apply
+                  // to it.
+                  atLimit: !isLink && store.atLimit,
+                  onTap: store.busy || (!isLink && store.atLimit)
+                      ? null
+                      : (isLink ? _addLink : _browse),
                 ),
 
                 if (isLink) ...[
@@ -246,9 +252,10 @@ class _UploadMaterialScreenState extends State<UploadMaterialScreen> {
 
                 if (store.uploaded.isNotEmpty) ...[
                   const SizedBox(height: 22),
-                  CardHeader('Added (${store.uploaded.length})'),
+                  CardHeader('Added (${store.uploaded.length}'
+                      ' of ${OnboardingStore.maxMaterials})'),
                   for (final material in store.uploaded)
-                    _MaterialRow(
+                    MaterialTile(
                       material: material,
                       onRetry: store.busy ? null : () => _retry(material),
                       onRemove: store.busy
@@ -342,10 +349,16 @@ class _OptionCard extends StatelessWidget {
 }
 
 class _DropZone extends StatelessWidget {
-  const _DropZone({required this.isLink, required this.busy, this.onTap});
+  const _DropZone({
+    required this.isLink,
+    required this.busy,
+    this.atLimit = false,
+    this.onTap,
+  });
 
   final bool isLink;
   final bool busy;
+  final bool atLimit;
   final VoidCallback? onTap;
 
   @override
@@ -375,16 +388,24 @@ class _DropZone extends StatelessWidget {
             Text(
                 busy
                     ? 'Uploading…'
-                    : isLink
-                        ? 'Paste a video or article link'
-                        : 'Tap to choose files',
+                    : atLimit
+                        ? 'File limit reached'
+                        : isLink
+                            ? 'Paste a video or article link'
+                            : 'Tap to choose files',
                 style: TextStyle(
                     color: p.ink, fontSize: 14.5, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
             Text(
-                isLink
-                    ? 'Saved for later — links are not read yet'
-                    : 'PDF, TXT or MD · up to 25 MB',
+                atLimit && !isLink
+                    ? 'Remove one below to add another'
+                    : isLink
+                        ? 'Saved for later — links are not read yet'
+                        // 25 MB is the bucket's limit, not the reader's:
+                        // `embed-material` refuses a PDF over 14 MB and a text
+                        // file over 2 MB, so promising 25 would upload files
+                        // that then fail to be read.
+                        : 'PDF up to 14 MB · TXT or MD up to 2 MB',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: p.ink3, fontSize: 12)),
             const SizedBox(height: 14),
@@ -392,67 +413,6 @@ class _DropZone extends StatelessWidget {
                 icon: isLink ? Symbols.add_link : Symbols.folder_open,
                 tone: ChipTone.primary,
                 onTap: onTap),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One uploaded source, with its ingest status, a retry for the failed ones, and
-/// a remove action.
-class _MaterialRow extends StatelessWidget {
-  const _MaterialRow({required this.material, this.onRetry, this.onRemove});
-
-  final StudyMaterial material;
-  final VoidCallback? onRetry;
-  final VoidCallback? onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.p;
-    final isLink = material.sourceType == MaterialType.videoLink;
-
-    final (statusColor, statusTone) = switch (material.status) {
-      IngestStatus.embedded => (p.green, ChipTone.green),
-      IngestStatus.failed => (p.error, ChipTone.error),
-      IngestStatus.processing => (p.amber, ChipTone.amber),
-      IngestStatus.uploaded => (p.ink3, ChipTone.neutral),
-    };
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: AppCard(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            IconTile(isLink ? Symbols.link : Symbols.description,
-                bg: statusColor.withValues(alpha: 0.14),
-                fg: statusColor,
-                size: 40,
-                radius: 12),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(material.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: p.ink,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  SoftChip(material.status.label, tone: statusTone, small: true),
-                ],
-              ),
-            ),
-            // Retry only on `failed`: nothing else is stuck. A link never leaves
-            // `uploaded`, so it correctly gets no retry either.
-            if (material.status == IngestStatus.failed)
-              RoundIconButton(Symbols.refresh, onTap: onRetry),
-            RoundIconButton(Symbols.close, onTap: onRemove),
           ],
         ),
       ),

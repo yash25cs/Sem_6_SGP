@@ -41,7 +41,8 @@ class ProfileRepository {
   }
 
   Future<List<Map<String, dynamic>>> getClasses() async {
-    final rows = await db.from('classes').select().order('name');
+    final rows =
+        await db.from('classes').select().order('name', ascending: true);
     return rows;
   }
 

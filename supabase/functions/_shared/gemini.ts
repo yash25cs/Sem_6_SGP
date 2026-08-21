@@ -2,25 +2,32 @@ import { HttpError } from './supa.ts';
 
 /// Thin client for the two Gemini surfaces these functions need.
 ///
-/// Verified against the live docs on 2026-08-20, and it is worth writing down
-/// because older samples look nothing like this:
+/// Every shape below was **measured against this project's own key** on
+/// 2026-08-22, not read off a docs page, because the docs sent an earlier
+/// version of this file down a path that does not work:
 ///
-///   * Generation is `POST /v1beta/interactions` with the model **in the body**.
-///     `models/{model}:generateContent` is no longer documented at all. The
-///     answer is not at `candidates[0]...` — the response is
-///     `{id, status, steps[]}` and the text lives on the last step whose `type`
-///     is `model_output`, at `content[0].text`.
-///   * Embeddings are unchanged: `POST /v1beta/models/{model}:embedContent`
-///     (and `:batchEmbedContents`), vector at `embeddings[n].values`.
-///   * `gemini-embedding-2` rejects `task_type` and expects task *templates* in
-///     the text instead — see [documentText] / [queryText].
+///   * Generation is `POST /v1beta/models/{model}:generateContent`, answer at
+///     `candidates[0].content.parts[].text`. `/v1beta/interactions` does exist
+///     and does answer, but it is not in any model's
+///     `supportedGenerationMethods`, and it turns thinking back on for models
+///     that otherwise skip it — so it buys nothing and costs latency.
+///     `/v1beta2/interactions`, which the migration guide recommends, is a 404.
+///   * `systemInstruction`, `generationConfig.responseMimeType` +
+///     `responseSchema`, and an inline PDF part all work in that one shape. The
+///     degradation ladder this file used to carry was guarding against
+///     doc contradictions that measurement resolved; it is gone.
+///   * Embeddings: `POST /v1beta/models/{model}:batchEmbedContents`, vector at
+///     `embeddings[n].values`. `gemini-embedding-2` answers in ~0.4 s and was
+///     never the slow part. It rejects `task_type` and expects task *templates*
+///     in the text instead — see [documentText] / [queryText].
 ///
-/// The docs also contradict themselves in two places: the migration guide says
-/// `/v1beta2/interactions` and a `response_format` **array**, while the
-/// text-generation, structured-output and document-processing pages all say
-/// `/v1beta/interactions` and a `response_format` **object**. So the base URL is
-/// an env var, and [interact] degrades through the other shapes on a 400 that
-/// names the field rather than failing the whole ingest over a doc discrepancy.
+/// **Model choice is load-bearing.** Measured, same three-word prompt:
+/// `gemini-3.7-flash` never answered inside 22 s on either endpoint, with
+/// thinking off or on; `gemini-3.6-flash` took 12.5 s and returned an *empty*
+/// answer with `finishReason: MAX_TOKENS`, having spent the entire output budget
+/// thinking; `gemini-3.5-flash-lite` answered in 0.77 s and does not think.
+/// Anything set in `GEMINI_TEXT_MODEL` needs the same check — a thinking model
+/// here reads as "the chatbot hangs, then says try again".
 
 const DEFAULT_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -42,7 +49,7 @@ function base(): string {
 }
 
 export function textModel(): string {
-  return env('GEMINI_TEXT_MODEL', 'gemini-3.7-flash');
+  return env('GEMINI_TEXT_MODEL', 'gemini-3.5-flash-lite');
 }
 
 export function embedModel(): string {
@@ -81,17 +88,47 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/// POSTs to Gemini with retries on the transient statuses.
+/// Ceiling for one call including its retries, when the caller names none.
+const DEFAULT_BUDGET_MS = 45_000;
+
+interface PostOptions {
+  /// Hard ceiling for the whole call, retries and backoff included.
+  budgetMs?: number;
+  /// Ceiling for a single attempt. Capped by whatever budget is left.
+  attemptMs?: number;
+}
+
+/// POSTs to Gemini with retries on the transient statuses, inside a deadline.
 ///
-/// Three attempts total: a free-tier 429 is common enough that giving up on the
-/// first one would make ingestion feel broken, and the whole ladder costs under
-/// two seconds of the function's wall clock.
+/// The deadline is not politeness. A Gemini call with no `AbortSignal` hung long
+/// enough to take the whole Edge Function worker down with
+/// `546 WORKER_RESOURCE_LIMIT` — which reaches the student as a blank failure
+/// with no message, because the worker died before it could write one. Bounding
+/// every attempt turns that into a real error the caller can report.
+///
+/// Three attempts at most: a free-tier 429 is common enough that giving up on
+/// the first would make ingestion feel broken.
+/// Whatever Gemini sent back. The shape is theirs, not ours, so it stays loose
+/// and every read of it is defensive.
 // deno-lint-ignore no-explicit-any
-async function post(path: string, body: unknown): Promise<any> {
+type GeminiJson = any;
+
+async function post(
+  path: string,
+  body: unknown,
+  opts: PostOptions = {},
+): Promise<GeminiJson> {
+  const deadline = Date.now() + (opts.budgetMs ?? DEFAULT_BUDGET_MS);
   let last: GeminiError | null = null;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await sleep(600 * attempt);
+
+    // Under a second left is not enough for a round trip; stop rather than
+    // spend the remainder proving it.
+    const remaining = deadline - Date.now();
+    if (remaining < 1_000) break;
+    const attemptMs = Math.min(opts.attemptMs ?? remaining, remaining);
 
     let response: Response;
     try {
@@ -102,12 +139,20 @@ async function post(path: string, body: unknown): Promise<any> {
           'x-goog-api-key': apiKey(),
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(attemptMs),
       });
     } catch (error) {
-      // Transport failure: no response at all, so retry it like a 503.
+      const timedOut = (error as Error)?.name === 'TimeoutError';
+      if (timedOut) {
+        console.warn(`Gemini ${path} did not answer within ${attemptMs}ms`);
+      }
+      // Transport failure or timeout: no response at all, so retry it like a
+      // 503 for as long as the budget allows.
       last = new GeminiError(
         503,
-        'Could not reach the AI service. Try again shortly.',
+        timedOut
+          ? 'The AI took too long to answer. Try again.'
+          : 'Could not reach the AI service. Try again shortly.',
         0,
         String(error),
       );
@@ -177,142 +222,18 @@ export interface InteractOptions {
   input: string | InputItem[];
   systemInstruction?: string;
   /// JSON Schema for structured output. Omit for prose.
-  // deno-lint-ignore no-explicit-any
-  schema?: any;
+  schema?: GeminiJson;
   temperature?: number;
+  /// Room for the answer. The model's ceiling is 65536; asking for less than the
+  /// answer needs comes back as [finishReason] `MAX_TOKENS` and a cut-off reply.
+  maxOutputTokens?: number;
+  /// Ceiling for the whole call. A PDF transcription earns more of the worker's
+  /// wall clock than a chat reply does.
+  budgetMs?: number;
 }
 
 /// One generation call, returning the model's text.
-///
-/// `store: false` on every request: Interactions keep conversation state
-/// server-side by default, and this app already keeps its own transcript in
-/// `chat_messages`. Nothing a student says needs to live in Google's history
-/// for us to answer the next question.
 export async function interact(opts: InteractOptions): Promise<string> {
-  // Degradations, each triggered only by a 400 that names the field it's about,
-  // and each strictly less capable than the last. See the note at the top of
-  // this file for why a documented request shape needs a ladder at all.
-  let schemaAsArray = false;
-  let schemaInPrompt = false;
-  let foldSystemIntoInput = false;
-  let dropGenerationConfig = false;
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    // With no `response_format`, the schema has to travel as instruction text —
-    // `parseJsonObject` is what makes that survivable.
-    const instruction = [
-      opts.systemInstruction,
-      schemaInPrompt && opts.schema
-        ? `Reply with JSON matching this schema and nothing else — no prose, no code fences:\n${
-          JSON.stringify(opts.schema)
-        }`
-        : null,
-    ].filter(Boolean).join('\n\n');
-
-    const input = foldSystemIntoInput && instruction
-      ? prependText(opts.input, `${instruction}\n\n`)
-      : opts.input;
-
-    // deno-lint-ignore no-explicit-any
-    const body: Record<string, any> = {
-      model: textModel(),
-      input,
-      store: false,
-    };
-    if (instruction && !foldSystemIntoInput) {
-      body.system_instruction = instruction;
-    }
-    if (opts.temperature !== undefined && !dropGenerationConfig) {
-      body.generation_config = { temperature: opts.temperature };
-    }
-    if (opts.schema && !schemaInPrompt) {
-      const format = {
-        type: 'text',
-        mime_type: 'application/json',
-        schema: opts.schema,
-      };
-      body.response_format = schemaAsArray ? [format] : format;
-    }
-
-    try {
-      return outputText(await post('/interactions', body));
-    } catch (error) {
-      if (!(error instanceof GeminiError)) throw error;
-
-      if (error.upstreamStatus === 400) {
-        if (opts.schema && !schemaInPrompt && /response_format/i.test(error.detail)) {
-          // Object form rejected → array form → give up on the field entirely
-          // and ask for JSON in words.
-          if (schemaAsArray) {
-            schemaInPrompt = true;
-          } else {
-            schemaAsArray = true;
-          }
-          continue;
-        }
-        if (
-          instruction && !foldSystemIntoInput &&
-          /system_instruction/i.test(error.detail)
-        ) {
-          foldSystemIntoInput = true;
-          continue;
-        }
-        if (
-          body.generation_config && !dropGenerationConfig &&
-          /generation_config|temperature/i.test(error.detail)
-        ) {
-          dropGenerationConfig = true;
-          continue;
-        }
-        // A 400 we don't recognise is our bug, not the student's. Log the
-        // upstream detail so the dashboard says what was actually wrong.
-        console.error('Gemini rejected the request:', error.detail);
-        throw error;
-      }
-
-      if (error.upstreamStatus === 404) {
-        // Either the endpoint or the model. Try the pre-Interactions surface
-        // once before giving up — some keys and models are still served there.
-        console.warn('Interactions 404; falling back to generateContent');
-        return await generateContentFallback(opts);
-      }
-
-      throw error;
-    }
-  }
-
-  throw new HttpError(502, 'The AI could not process that request.');
-}
-
-function prependText(
-  input: string | InputItem[],
-  prefix: string,
-): string | InputItem[] {
-  if (typeof input === 'string') return prefix + input;
-  return [{ type: 'text', text: prefix }, ...input];
-}
-
-/// Text of the last `model_output` step.
-// deno-lint-ignore no-explicit-any
-function outputText(response: any): string {
-  const steps = Array.isArray(response?.steps) ? response.steps : [];
-  for (let i = steps.length - 1; i >= 0; i--) {
-    if (steps[i]?.type !== 'model_output') continue;
-    const content = Array.isArray(steps[i]?.content) ? steps[i].content : [];
-    const text = content
-      // deno-lint-ignore no-explicit-any
-      .filter((c: any) => typeof c?.text === 'string')
-      // deno-lint-ignore no-explicit-any
-      .map((c: any) => c.text as string)
-      .join('')
-      .trim();
-    if (text.length > 0) return text;
-  }
-  throw new HttpError(502, 'The AI returned an empty answer. Try again.');
-}
-
-/// The classic `:generateContent` shape, for keys or models still served there.
-async function generateContentFallback(opts: InteractOptions): Promise<string> {
   const parts = typeof opts.input === 'string'
     ? [{ text: opts.input }]
     : opts.input.map((item) =>
@@ -321,41 +242,74 @@ async function generateContentFallback(opts: InteractOptions): Promise<string> {
         : { inline_data: { mime_type: item.mime_type, data: item.data } }
     );
 
-  // deno-lint-ignore no-explicit-any
-  const body: Record<string, any> = {
-    contents: [{ role: 'user', parts }],
-  };
-  if (opts.systemInstruction) {
-    body.system_instruction = { parts: [{ text: opts.systemInstruction }] };
-  }
-  // deno-lint-ignore no-explicit-any
-  const generationConfig: Record<string, any> = {};
+  const generationConfig: Record<string, GeminiJson> = {};
   if (opts.temperature !== undefined) {
     generationConfig.temperature = opts.temperature;
+  }
+  if (opts.maxOutputTokens !== undefined) {
+    generationConfig.maxOutputTokens = opts.maxOutputTokens;
   }
   if (opts.schema) {
     generationConfig.responseMimeType = 'application/json';
     generationConfig.responseSchema = opts.schema;
   }
-  if (Object.keys(generationConfig).length > 0) {
-    body.generationConfig = generationConfig;
+
+  const body: Record<string, GeminiJson> = {
+    contents: [{ role: 'user', parts }],
+    // Nothing a student says needs to live in Google's history for us to answer
+    // the next question, and this app keeps its own transcript in
+    // `chat_messages`.
+    ...(opts.systemInstruction
+      ? { systemInstruction: { parts: [{ text: opts.systemInstruction }] } }
+      : {}),
+    ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
+  };
+
+  let response: GeminiJson;
+  try {
+    response = await post(
+      `/models/${textModel()}:generateContent`,
+      body,
+      { budgetMs: opts.budgetMs, attemptMs: opts.budgetMs },
+    );
+  } catch (error) {
+    if (error instanceof GeminiError && error.upstreamStatus === 400) {
+      // A 400 here is our bug, not the student's. Log what upstream actually
+      // objected to so the dashboard says it plainly.
+      console.error('Gemini rejected the request:', error.detail);
+    }
+    throw error;
   }
 
-  const response = await post(
-    `/models/${textModel()}:generateContent`,
-    body,
-  );
-  const text = (response?.candidates?.[0]?.content?.parts ?? [])
-    // deno-lint-ignore no-explicit-any
-    .filter((p: any) => typeof p?.text === 'string')
-    // deno-lint-ignore no-explicit-any
-    .map((p: any) => p.text as string)
+  return outputText(response);
+}
+
+/// Text of the first candidate, with the two silent-failure modes named.
+function outputText(response: GeminiJson): string {
+  const candidate = response?.candidates?.[0];
+  const text = (candidate?.content?.parts ?? [])
+    .filter((p: GeminiJson) => typeof p?.text === 'string')
+    .map((p: GeminiJson) => p.text as string)
     .join('')
     .trim();
-  if (!text) {
-    throw new HttpError(502, 'The AI returned an empty answer. Try again.');
+  if (text.length > 0) return text;
+
+  const finish = candidate?.finishReason ?? response?.promptFeedback?.blockReason;
+  if (finish === 'MAX_TOKENS') {
+    // Measured on `gemini-3.6-flash`: reasoning tokens are drawn from the same
+    // budget as the answer, so a thinking model can spend all of it and emit
+    // nothing at all. Says which knob to turn rather than "try again".
+    console.error(
+      `Model ${textModel()} returned no text and finished on MAX_TOKENS. ` +
+        'Usage: ' + JSON.stringify(response?.usageMetadata ?? {}),
+    );
+    throw new HttpError(
+      502,
+      'The AI ran out of room before it answered. Try a shorter question.',
+    );
   }
-  return text;
+  console.error(`Empty Gemini answer, finishReason=${finish}`);
+  throw new HttpError(502, 'The AI returned an empty answer. Try again.');
 }
 
 /// Embeds [texts] in order, in batches.
@@ -375,6 +329,8 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 
   for (let i = 0; i < texts.length; i += EMBED_BATCH) {
     const slice = texts.slice(i, i + EMBED_BATCH);
+    // A measured batch answers in well under a second, so one still running at
+    // 20s is stuck rather than busy.
     const response = await post(`/models/${model}:batchEmbedContents`, {
       requests: slice.map((text) => ({
         model: `models/${model}`,
@@ -382,7 +338,7 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
         output_dimensionality: EMBED_DIM,
         ...(taskType ? { taskType } : {}),
       })),
-    });
+    }, { budgetMs: 40_000, attemptMs: 20_000 });
 
     const list = response?.embeddings;
     if (!Array.isArray(list) || list.length !== slice.length) {

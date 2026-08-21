@@ -135,10 +135,29 @@ npx --yes supabase@latest secrets set GEMINI_API_KEY=your_key_here --project-ref
 | Name | Default | Why you'd set it |
 |---|---|---|
 | `GEMINI_API_KEY` | — | Required. Without it both functions answer *"The AI features are not set up for this project yet."* |
-| `GEMINI_TEXT_MODEL` | `gemini-3.7-flash` | A cheaper or newer text model. |
+| `GEMINI_TEXT_MODEL` | `gemini-3.5-flash-lite` | A newer text model — but re-time it first. Thinking models spend the answer's token budget on thinking and return empty text (see below). |
 | `GEMINI_EMBED_MODEL` | `gemini-embedding-2` | Falling back to `gemini-embedding-001` — pair it with `GEMINI_EMBED_TASK_TYPE`, which `gemini-embedding-2` rejects. |
 | `GEMINI_EMBED_DIM` | `768` | Only if `material_chunks.embedding` changes, which means re-embedding everything. |
-| `GEMINI_API_BASE` | `https://generativelanguage.googleapis.com/v1beta` | The docs disagree with themselves about `/v1beta` vs `/v1beta2` for Interactions; this is the escape hatch. |
+| `GEMINI_API_BASE` | `https://generativelanguage.googleapis.com/v1beta` | Only `/v1beta` works — `/v1beta2` is a 404 despite what the migration guide says. |
+
+#### The text model is load-bearing
+
+Measured against this project's key on 2026-08-22, `:generateContent`, a
+three-word prompt:
+
+| Model | Latency | Result |
+|---|---|---|
+| `gemini-3.5-flash-lite` | 765 ms | Answers. No thinking tokens. **The default.** |
+| `gemini-3.5-flash` | 923 ms | Answers, but 39 of 40 tokens were thinking. |
+| `gemini-3.6-flash` | 12.5 s | `finishReason: MAX_TOKENS`, **empty text**. |
+| `gemini-3.7-flash` | never inside 22 s | Unusable. Was the old default. |
+| `gemini-2.5-flash`, `-lite` | — | `404`, retired for new keys. |
+
+Swapping in a thinking model does not produce slow answers — it produces no
+answers, and before the deadlines in `_shared/gemini.ts` it produced
+`HTTP 546 WORKER_RESOURCE_LIMIT` with nothing in the logs. `outputText()` now
+logs `finishReason` and the usage breakdown on both failure modes, so check the
+function logs after any change here.
 
 Custom names may not start with `SUPABASE_` — that prefix is reserved for the
 `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` the runtime

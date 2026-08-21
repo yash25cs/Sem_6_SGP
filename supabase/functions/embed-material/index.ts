@@ -287,6 +287,14 @@ async function pdfSections(
         mime_type: 'application/pdf',
       },
     ],
+    // 120 sections of a few hundred words each. The model's ceiling is 65536,
+    // and [sectionList] salvages whatever arrives if a document still outruns
+    // this.
+    maxOutputTokens: 48_000,
+    // Reading a whole syllabus earns more of the worker's wall clock than a
+    // chat reply does, but not so much that the worker is killed mid-write:
+    // chunks and the status flip both still have to happen after this returns.
+    budgetMs: 90_000,
   });
 
   const sections: Section[] = [];

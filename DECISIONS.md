@@ -134,6 +134,73 @@ non-trivial choice.
   without Deno, so the first real test is a deploy against live infrastructure.
 - **Trade-off:** More code than a single request shape, and a wrong guess costs
   an extra round trip before it corrects itself.
+- **Superseded by D-014** on 2026-08-22, once the live deploy made guessing
+  unnecessary.
+
+### D-014 — One measured request shape, not a degradation ladder
+
+- **Decision:** Supersedes D-013. `interact()` sends exactly one shape —
+  `POST /v1beta/models/{model}:generateContent` with camelCase
+  `systemInstruction` and `generationConfig` — and reads the answer from
+  `candidates[0].content.parts[].text`. The retry ladder, the `prependText`
+  fallback and the `generateContentFallback` path are deleted.
+- **Why:** Deploying settled every question the docs left open. The shape above
+  works with `systemInstruction`, with `responseMimeType` +`responseSchema`, and
+  with an inlined PDF. `/v1beta/interactions` does answer, but it appears in no
+  model's `supportedGenerationMethods` and it re-enables thinking;
+  `/v1beta2/interactions` is a 404.
+- **Trade-off:** A future API change now fails outright instead of limping. That
+  is the better failure: the ladder turned a wrong guess into a slow, silent
+  degradation, and a hard 400 with the response body logged is diagnosable in
+  one deploy.
+
+### D-015 — Every Gemini call runs under a deadline
+
+- **Decision:** `post()` takes a `budgetMs` for the whole call and an
+  `attemptMs` per try, and each `fetch` carries `AbortSignal.timeout`. Chat asks
+  for 30 s, PDF sectioning 90 s, embeddings 40 s with 20 s attempts. A timeout
+  surfaces as `503 "The AI took too long to answer. Try again."`.
+- **Why:** An unbounded call hits the Edge Runtime's own ceiling instead —
+  `HTTP 546 {"code":"WORKER_RESOURCE_LIMIT"}` — and the worker is killed before
+  it can write an error, so the student sees a blank failure with nothing in the
+  logs. This is the reported symptom "it takes so much time and tells me to try
+  again."
+- **Trade-off:** A genuinely slow-but-successful answer is now thrown away. With
+  the model in D-016 answering in under a second, that trade is close to free.
+
+### D-016 — `gemini-3.5-flash-lite` for text, because thinking models never answer
+
+- **Decision:** `GEMINI_TEXT_MODEL` defaults to `gemini-3.5-flash-lite`.
+- **Why:** Measured against this project's key on 2026-08-22, the previous
+  default `gemini-3.7-flash` never answered inside 22 s — on
+  `:generateContent` or `/v1beta/interactions`, thinking off or on. Worse,
+  `gemini-3.6-flash` returned in 12.5 s with `finishReason: MAX_TOKENS` and
+  **empty text**, because thinking spends the same token budget as the answer.
+  `gemini-3.5-flash` answered in 923 ms but spent 39 of 40 tokens thinking.
+  `-lite` does no thinking: 765 ms, and it still honours `systemInstruction`,
+  JSON schemas, and inline PDFs. Ingesting a real PDF went from 124.7 s (which
+  died on the worker limit) to 7.4 s; chat answers land in 5.4–7.5 s.
+- **Trade-off:** A lite model reasons less well on a hard question. For a tutor
+  quoting the student's own notes back at them the retrieved excerpts carry the
+  reasoning, and an answer that arrives beats a better one that never does.
+  Anything set in `GEMINI_TEXT_MODEL` needs re-timing before it is trusted —
+  `outputText()` now names both silent failures (`MAX_TOKENS`, empty text) in
+  the logs so a bad swap is obvious.
+
+### D-017 — 20 materials per student, enforced in the store
+
+- **Decision:** `OnboardingStore.maxMaterials = 20`, checked in
+  `pickAndUpload` (an oversized multi-file pick is trimmed to the free slots
+  rather than refused wholesale) and surfaced in both places a file can be
+  added: the onboarding drop zone and the chat screen's materials sheet.
+- **Why:** Cost and answer quality point the same way. Every file is read by
+  Gemini once on upload and its chunks are searched on every question, and
+  `match_material_chunks` returns the 6 best regardless of how many exist — so
+  past a point more files stop improving answers and start diluting retrieval,
+  with a stray page from a half-related PDF outranking the right unit.
+- **Trade-off:** A student with more than a semester's material has to remove
+  something. Enforced client-side, so it is a guardrail rather than a security
+  boundary; the real limits are the bucket quota and RLS.
 
 ## Update rule
 

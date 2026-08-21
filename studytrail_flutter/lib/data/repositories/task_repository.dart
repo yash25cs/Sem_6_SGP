@@ -13,8 +13,8 @@ class TaskRepository {
         .from('daily_tasks')
         .select('*, subjects(name)')
         .eq('scheduled_date', day)
-        .order('done')
-        .order('tag');
+        .order('done', ascending: true)
+        .order('tag', ascending: true);
     return rows.map(DailyTask.fromMap).toList();
   }
 

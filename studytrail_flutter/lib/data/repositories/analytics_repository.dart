@@ -61,7 +61,7 @@ class AnalyticsRepository {
         .from('subjects')
         .select()
         .order('is_focus', ascending: false)
-        .order('name');
+        .order('name', ascending: true);
     return rows.map(Subject.fromMap).toList();
   }
 

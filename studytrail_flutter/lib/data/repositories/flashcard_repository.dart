@@ -68,7 +68,7 @@ class FlashcardRepository {
         .select()
         .lte('due_at', DateTime.now().toUtc().toIso8601String());
     if (deckId != null) query = query.eq('deck_id', deckId);
-    final rows = await query.order('due_at').limit(limit);
+    final rows = await query.order('due_at', ascending: true).limit(limit);
     return rows.map(Flashcard.fromMap).toList();
   }
 
@@ -77,7 +77,7 @@ class FlashcardRepository {
         .from('flashcards')
         .select()
         .eq('deck_id', deckId)
-        .order('front');
+        .order('front', ascending: true);
     return rows.map(Flashcard.fromMap).toList();
   }
 

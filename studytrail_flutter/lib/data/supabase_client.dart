@@ -54,6 +54,10 @@ bool isNetworkError(Object error) {
 /// Postgres error codes we care about:
 /// `23505` unique violation, `23503` FK violation, `42501` RLS denial.
 String friendlyError(Object error) {
+  // A String here is a message this app wrote for the student itself — a limit
+  // it enforces, say — so there is nothing to translate.
+  if (error is String) return error;
+
   if (isNetworkError(error)) {
     return "Can't reach StudyTrail. Check your Wi-Fi or mobile data, "
         'then try again.';

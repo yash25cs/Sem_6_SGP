@@ -116,6 +116,11 @@ serve(async (req) => {
     systemInstruction: TUTOR_INSTRUCTION,
     temperature: 0.3,
     input: buildPrompt(question, excerpts, history ?? []),
+    // A tutor's reply, not an essay. Generous enough for a worked example.
+    maxOutputTokens: 2048,
+    // The student is watching a typing indicator while this runs, so it fails
+    // fast rather than sitting there until the worker is killed.
+    budgetMs: 30_000,
   });
 
   const { data: reply, error: replyError } = await supa

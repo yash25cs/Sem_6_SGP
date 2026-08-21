@@ -45,12 +45,17 @@ class ChatRepository {
   }
 
   /// Full transcript, oldest first, with citation chips embedded.
+  ///
+  /// `ascending: true` is not decoration: postgrest-dart's `order` defaults to
+  /// **descending**, the opposite of PostgREST's own default. Leaving it off
+  /// rendered every conversation upside down — each answer above the question
+  /// that prompted it.
   Future<List<ChatMessage>> getMessages(String threadId) async {
     final rows = await db
         .from('chat_messages')
         .select('*, chat_citations(*)')
         .eq('thread_id', threadId)
-        .order('created_at');
+        .order('created_at', ascending: true);
     return rows.map(ChatMessage.fromMap).toList();
   }
 

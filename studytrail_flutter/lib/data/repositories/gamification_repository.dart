@@ -29,7 +29,7 @@ class GamificationRepository {
         .from('activity_log')
         .select()
         .gte('activity_date', _dateOnly(cutoff))
-        .order('activity_date');
+        .order('activity_date', ascending: true);
     return rows.map(ActivityDay.fromMap).toList();
   }
 
@@ -43,7 +43,7 @@ class GamificationRepository {
     final rows = await db
         .from('badges')
         .select('*, user_badges!left(*)')
-        .order('key');
+        .order('key', ascending: true);
     final all = rows.map(AchievementBadge.fromMap).toList();
     return onlyUnlocked ? all.where((b) => b.unlocked).toList() : all;
   }

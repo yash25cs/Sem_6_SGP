@@ -11,7 +11,7 @@ class RoadmapRepository {
         .from('milestones')
         .select('*, milestone_tasks(*)')
         .eq('goal_id', goalId)
-        .order('order_index');
+        .order('order_index', ascending: true);
     return rows.map(Milestone.fromMap).toList();
   }
 

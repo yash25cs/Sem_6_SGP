@@ -95,9 +95,17 @@ sign-out and sign-in.
   view separately, then merges counts into deck rows in Flutter. PostgREST
   cannot embed an aggregated view because it has no foreign-key relationship.
 - Material ingestion and cited AI chat are implemented as the `embed-material`
-  and `chat` Edge Functions. Both are deployed and ACTIVE with `verify_jwt`,
-  `GEMINI_API_KEY` is set, and both modules were confirmed to boot. The Gemini
-  request path itself is still unexercised — it needs one signed-in upload.
+  and `chat` Edge Functions. Both are deployed and ACTIVE with `verify_jwt`, and
+  the Gemini path is now exercised end to end: a real PDF uploaded by a signed-in
+  student becomes unit-labelled chunks with `status = embedded` in 7.4 s, and
+  chat answers from those chunks with citations in 5.4–7.5 s. The text model is
+  `gemini-3.5-flash-lite` and that choice is load-bearing — see `DECISIONS.md`
+  D-016 and the timing table in `supabase/README.md`.
+- Every Gemini call runs under a deadline (`DECISIONS.md` D-015). Without one the
+  Edge Runtime kills the worker with `546 WORKER_RESOURCE_LIMIT` before it can
+  report anything, which reads to a student as a long wait and then "try again".
+- A student may keep 20 materials (`DECISIONS.md` D-017). They can see and manage
+  them from the chat screen's top-right button as well as from onboarding.
 - Flashcard, quiz, and roadmap generation and real-time study rooms are still
   pending Edge Functions (Phase C follow-up / Phase D).
 
@@ -119,3 +127,6 @@ in `DECISIONS.md`.
 | 2026-08-15 | Initialised Git and pushed the StudyTrail baseline to GitHub `main`. | Repository root | Commit `aaf625a` is now the shared baseline; future work follows `DAILY_PLAN.md`. |
 | 2026-08-20 | Added the `embed-material` and `chat` Edge Functions and wired both client paths. | `supabase/functions/`, `supabase/config.toml`, `studytrail_flutter/lib/data/repositories/{material,chat}_repository.dart`, `lib/state/{onboarding,chat}_store.dart`, `lib/screens/upload_material_screen.dart`, `lib/models/study_material.dart` | `flutter analyze` clean and `flutter build apk --debug` succeeded. End-to-end ingestion and cited chat still need `GEMINI_API_KEY` and a `functions deploy`. |
 | 2026-08-21 | Deployed both Edge Functions and applied migrations `0008`/`0009` on the hosted project. | Hosted Supabase project (no source change) | `functions list` shows both ACTIVE with `verify_jwt`; an anon-key POST to each returned the functions' own 401 JSON, proving the Deno modules load and `requireUser` runs. All seven reward RPCs plus `create_goal` resolve; 20/20 owner tables return no rows to an anon caller. The Gemini request path is still unexercised. |
+| 2026-08-22 | Exercised the Gemini path and fixed what it exposed: one measured request shape in place of the degradation ladder, per-call deadlines, and `gemini-3.5-flash-lite` as the text model. | `supabase/functions/_shared/gemini.ts`, `supabase/functions/{chat,embed-material}/index.ts` | Timed against the live key: the old default `gemini-3.7-flash` never answered inside 22 s and `gemini-3.6-flash` returned empty text on `MAX_TOKENS`. After the swap a real PDF ingested in 7.4 s (was 124.7 s, dying on `546 WORKER_RESOURCE_LIMIT`) producing 2 correctly unit-labelled chunks and `status = embedded`; chat answered "summarize this pdf" from them with citations in 5.4–7.5 s, and quoted an invented term planted in the PDF — proving the answer came from retrieval, not model knowledge. |
+| 2026-08-22 | Fixed upside-down chat transcripts, and the same latent bug in ten other sorts. | `studytrail_flutter/lib/data/repositories/*.dart` | postgrest-dart's `order()` defaults to **descending**, the opposite of PostgREST's own default, so `getMessages` returned newest-first and every answer rendered above its question. All 11 `.order()` calls are now explicit; `flutter analyze` clean. |
+| 2026-08-22 | Added a materials sheet to the chat screen, a 20-file cap, and an animated typing indicator. | `studytrail_flutter/lib/screens/{chat,upload_material}_screen.dart`, `lib/widgets/material_tile.dart`, `lib/state/onboarding_store.dart`, `lib/data/supabase_client.dart` | `flutter analyze` clean. The header button badges the file count and turns amber when nothing is searchable; the sheet lists every material with retry/remove and an add button that disables at the cap. `MaterialTile` was extracted so onboarding and chat show the same row. |

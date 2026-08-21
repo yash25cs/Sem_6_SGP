@@ -18,6 +18,16 @@ class OnboardingStore extends AsyncStore {
   final MaterialRepository _materials;
   final GoalRepository _goals;
 
+  /// How many materials one student may keep.
+  ///
+  /// Chosen for the free tier's actual costs, not as a round number: every file
+  /// is re-read by Gemini on upload and its chunks are searched on every single
+  /// question. The `chat` function returns the 6 best chunks regardless of how
+  /// many exist, so past a point more files stop improving answers and only
+  /// dilute retrieval — a stray page from a half-related PDF starts outranking
+  /// the right unit. 20 covers a full semester's subjects with room to spare.
+  static const maxMaterials = 20;
+
   List<StudyMaterial> _uploaded = const [];
   Goal? _goal;
 
@@ -25,6 +35,14 @@ class OnboardingStore extends AsyncStore {
   List<StudyMaterial> get uploaded => _uploaded;
   Goal? get createdGoal => _goal;
   bool get hasMaterial => _uploaded.isNotEmpty;
+
+  /// Whether another file may be added. Drives the disabled state on both the
+  /// onboarding drop zone and the chat sheet's add button.
+  bool get atLimit => _uploaded.length >= maxMaterials;
+
+  /// Slots left before [maxMaterials] is reached.
+  int get remainingSlots =>
+      (maxMaterials - _uploaded.length).clamp(0, maxMaterials);
 
   Future<void> load() => runLoad(() async {
         _uploaded = await _materials.getMaterials();
@@ -40,6 +58,13 @@ class OnboardingStore extends AsyncStore {
   /// files really are stored — reporting 0 there would have told the student
   /// nothing happened while [uploaded] showed otherwise.
   Future<int> pickAndUpload(MaterialType sourceType) async {
+    if (atLimit) {
+      setError(
+        'You already have $maxMaterials files. Remove one to add another.',
+      );
+      return 0;
+    }
+
     final result = await FilePicker.pickFiles(
       allowMultiple: true,
       type: sourceType == MaterialType.syllabusPdf
@@ -59,10 +84,16 @@ class OnboardingStore extends AsyncStore {
     final picked = result.files.where((f) => f.path != null).toList();
     if (picked.isEmpty) return 0;
 
+    // Selecting 30 files at the picker is the easy way past the cap, so the
+    // batch is trimmed here rather than refused — the first few land, and the
+    // student is told the rest didn't.
+    final skipped = picked.length - remainingSlots;
+    final batch = skipped > 0 ? picked.take(remainingSlots).toList() : picked;
+
     var stored = 0;
     final fresh = <StudyMaterial>[];
     await runMutation(() async {
-      for (final file in picked) {
+      for (final file in batch) {
         final saved = await _materials.uploadFile(
           file: File(file.path!),
           fileName: file.name,
@@ -79,6 +110,17 @@ class OnboardingStore extends AsyncStore {
     // is stored either way — the row's status is what says whether it's
     // searchable yet.
     await _ingestAll(fresh);
+
+    // Set last so a real ingest failure keeps the more useful message.
+    if (skipped > 0 && error == null) {
+      setError(
+        skipped == 1
+            ? 'One file was skipped — that would pass the $maxMaterials-file '
+                'limit.'
+            : '$skipped files were skipped — those would pass the '
+                '$maxMaterials-file limit.',
+      );
+    }
     return stored;
   }
 
